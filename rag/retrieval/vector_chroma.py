@@ -1,45 +1,34 @@
 """
 Chroma vector store wrapper for CLASSMATE-RAG.
 
-Features:
-- Persistent client bound to CHROMA_PERSIST_DIRECTORY and collection name.
-- Idempotent upsert: delete existing IDs then add embeddings/documents/metadata.
-- Metadata-aware query with simple equality and tag inclusion filters.
-- Cosine space by default (pairs well with L2-normalized e5 embeddings).
+Dual-mode client:
+- If env CHROMA_HTTP_URL is set -> use HttpClient (thin client; no default EF; no onnx)
+- Else -> use PersistentClient (full library; we still set embedding_function=None)
 
-We keep embeddings external (already computed via the e5 embedder) and pass
-them explicitly to add/query; this avoids hidden embedding behavior.
+We always supply embeddings explicitly (from E5), so we NEVER want Chroma's default
+embedding function. Passing embedding_function=None on collection creation is essential.
+
+This module lazy-imports chromadb to avoid import-time side effects on envs
+where the full library may try to init a default embedder.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Mapping, Optional, Sequence, List
 
 import numpy as np
-import chromadb
 
 from rag.config import load_config
 
 
-# ---------------------------
-# Filter builder
-# ---------------------------
-
 def build_where_filter(meta_like: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
-    """
-    Convert a metadata-like dict (e.g., from DocumentMetadata.to_dict()) into a Chroma 'where' filter.
-    - Only includes non-empty fields among: course, unit, language, doc_type, author, semester
-    - For 'tags': if a list is provided, require each tag to be present (AND of $contains)
-    Returns None if no filterable fields are set.
-    """
     if not meta_like:
         return None
-
     simple_fields = ["course", "unit", "language", "doc_type", "author", "semester"]
     clauses: List[Dict[str, Any]] = []
-
     for f in simple_fields:
         v = meta_like.get(f)
         if v is None:
@@ -47,50 +36,107 @@ def build_where_filter(meta_like: Mapping[str, Any]) -> Optional[Dict[str, Any]]
         if isinstance(v, str) and not v.strip():
             continue
         clauses.append({f: v})
-
     tags = meta_like.get("tags")
     if tags:
         if isinstance(tags, (list, tuple)):
             for t in tags:
                 if isinstance(t, str) and t.strip():
-                    # Chroma supports $contains on array fields
                     clauses.append({"tags": {"$contains": t}})
         elif isinstance(tags, str) and tags.strip():
             clauses.append({"tags": {"$contains": tags.strip()}})
-
     if not clauses:
         return None
-
-    # If there's more than one clause, AND them together
     if len(clauses) == 1:
         return clauses[0]
     return {"$and": clauses}
 
 
-# ---------------------------
-# Vector store wrapper
-# ---------------------------
-
 @dataclass
 class ChromaVectorStore:
     persist_dir: Path
     collection_name: str = "classmate_rag"
-    distance: str = "cosine"  # cosine recommended for L2-normalized embeddings
+    distance: str = "cosine"  # cosine for L2-normalized e5 embeddings
 
-    # internal
-    _client: Optional[chromadb.PersistentClient] = None
+    _client: Optional[Any] = None
     _collection: Optional[Any] = None
+    _mode_http: bool = False
 
-    def _ensure_client(self) -> chromadb.PersistentClient:
-        if self._client is None:
-            self.persist_dir.mkdir(parents=True, exist_ok=True)
-            self._client = chromadb.PersistentClient(path=str(self.persist_dir))
+    def _import_chromadb(self):
+        import importlib
+        return importlib.import_module("chromadb")
+
+    def _ensure_client(self):
+        """
+        Use HTTP client if CHROMA_HTTP_URL is set (recommended on Windows),
+        else use local PersistentClient.
+        """
+        if self._client is not None:
+            return self._client
+
+        chromadb = self._import_chromadb()
+        http_url = os.getenv("CHROMA_HTTP_URL", "").strip()
+
+        if http_url:
+            # -------- HTTP (thin) client mode --------
+            self._mode_http = True
+
+            # Parse host/port from URL
+            host, port = "127.0.0.1", 8000
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(http_url)
+                if parsed.hostname:
+                    host = parsed.hostname
+                if parsed.port:
+                    port = parsed.port
+            except Exception:
+                pass
+
+            # Build Settings with the impl string the client expects.
+            # Some client builds want "chromadb.api.fastapi.FastAPI",
+            # others accept "rest". We'll try FastAPI first, then fallback to "rest".
+            from chromadb.config import Settings
+
+            def make_http_client(impl: str):
+                settings = Settings(
+                    chroma_api_impl=impl,
+                    chroma_server_host=host,
+                    chroma_server_http_port=port,
+                    anonymized_telemetry=False,
+                )
+                # Newer thin clients accept (settings=...) only; keep host/port for older ones
+                try:
+                    return chromadb.HttpClient(settings=settings)
+                except TypeError:
+                    return chromadb.HttpClient(host=host, port=port, settings=settings)
+
+            try:
+                self._client = make_http_client("chromadb.api.fastapi.FastAPI")
+            except Exception:
+                # Fallback for older docs/clients
+                self._client = make_http_client("rest")
+
+            return self._client
+
+        # -------- Local persistent mode (full library) --------
+        self._mode_http = False
+        self.persist_dir.mkdir(parents=True, exist_ok=True)
+        self._client = chromadb.PersistentClient(path=str(self.persist_dir))
         return self._client
 
     def _ensure_collection(self):
-        if self._collection is None:
-            client = self._ensure_client()
-            # We don't pass an embedding function; we supply embeddings explicitly
+        if self._collection is not None:
+            return self._collection
+        client = self._ensure_client()
+        # Always disable default EF. We supply embeddings explicitly.
+        try:
+            self._collection = client.get_or_create_collection(
+                name=self.collection_name,
+                metadata={"hnsw:space": self.distance},
+                embedding_function=None,
+            )
+        except TypeError:
+            # Some thin-client versions don't accept embedding_function kwarg
             self._collection = client.get_or_create_collection(
                 name=self.collection_name,
                 metadata={"hnsw:space": self.distance},
@@ -108,13 +154,8 @@ class ChromaVectorStore:
         embeddings: np.ndarray,
         batch_size: int = 512,
     ) -> None:
-        """
-        Idempotent add: delete any existing records with these IDs, then add.
-        Expects embeddings as (N, D) numpy array (float32/float64).
-        """
         if len(ids) != len(documents) or len(ids) != len(metadatas) or len(ids) != len(embeddings):
             raise ValueError("Lengths of ids, documents, metadatas, and embeddings must match.")
-
         col = self._ensure_collection()
 
         # Delete existing IDs in batches
@@ -123,7 +164,6 @@ class ChromaVectorStore:
             try:
                 col.delete(ids=batch_ids)
             except Exception:
-                # Ignore missing IDs
                 pass
 
         # Add new records in batches
@@ -132,7 +172,6 @@ class ChromaVectorStore:
             batch_docs = list(documents[i : i + batch_size])
             batch_meta = list(metadatas[i : i + batch_size])
             batch_emb = embeddings[i : i + batch_size]
-            # Ensure serializable types
             emb_list = batch_emb.astype("float32").tolist()
             col.add(
                 ids=batch_ids,
@@ -151,16 +190,6 @@ class ChromaVectorStore:
         top_k: int = 8,
         include_documents: bool = True,
     ) -> List[Dict[str, Any]]:
-        """
-        Perform a vector similarity query.
-        Returns a list of result dicts:
-            {
-              "id": str,
-              "document": str,
-              "metadata": dict,
-              "distance": float
-            }
-        """
         if query_embeddings.ndim == 1:
             q = [query_embeddings.astype("float32").tolist()]
         else:
@@ -178,7 +207,6 @@ class ChromaVectorStore:
             include=include,
         )
 
-        # Chroma returns lists per query; we only pass one query vector at a time here.
         ids = (res.get("ids") or [[]])[0]
         docs = (res.get("documents") or [[]])[0] if include_documents else [None] * len(ids)
         metas = (res.get("metadatas") or [[]])[0]
@@ -196,10 +224,9 @@ class ChromaVectorStore:
             )
         return out
 
-    # ---- Maintenance / stats ----
+    # ---- Maintenance ----
 
     def count(self) -> int:
-        """Return number of items in the collection (approx)."""
         col = self._ensure_collection()
         try:
             return col.count()
@@ -207,9 +234,6 @@ class ChromaVectorStore:
             return 0
 
     def reset_collection(self) -> None:
-        """
-        Drop and recreate the collection (dangerous). Use only for full reindex.
-        """
         client = self._ensure_client()
         try:
             client.delete_collection(self.collection_name)
@@ -217,8 +241,6 @@ class ChromaVectorStore:
             pass
         self._collection = None
         self._ensure_collection()
-
-    # ---- Factory ----
 
     @classmethod
     def from_config(cls) -> "ChromaVectorStore":
