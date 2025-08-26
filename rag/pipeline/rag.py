@@ -281,6 +281,7 @@ def ask_question(
         contexts=results,
         forced_language=forced_lang,
         default_language=str(cfg.default_language),
+        max_context_chars=3500,  # fits comfortably with n_ctx≈4096 and answer tokens
     )
 
     _, prov = format_context_blocks(results)
