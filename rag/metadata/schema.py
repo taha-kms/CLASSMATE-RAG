@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Tuple
 class LanguageEnum(str, Enum):
     en = "en"
     it = "it"
-    auto = "auto"  # CLI accepts; replaced per-chunk when detection is enabled
+    auto = "auto"
 
 
 class DocTypeEnum(str, Enum):
@@ -131,7 +131,7 @@ def _normalize_doc_type(v: Optional[str]) -> DocTypeEnum:
         "pdf": DocTypeEnum.pdf,
         "docx": DocTypeEnum.docx,
         "pptx": DocTypeEnum.pptx,
-        "ppt": DocTypeEnum.pptx,  # allow legacy extension
+        "ppt": DocTypeEnum.pptx,
         "md": DocTypeEnum.md,
         "markdown": DocTypeEnum.md,
         "txt": DocTypeEnum.txt,
