@@ -1,12 +1,9 @@
 """
-CLASSMATE-RAG CLI (Step 4: UX & flags)
+CLASSMATE-RAG CLI (Step 12: end-to-end with provenance)
 
 Commands:
-  - add <path> [metadata flags]
-  - ask "<question>" [filter flags]
-
-This step focuses on the user-facing interface and metadata normalization.
-Indexing and QA pipeline calls will be wired in subsequent steps.
+  - add <path> [metadata flags]     -> ingest and index the file
+  - ask "<question>" [filter flags] -> retrieve, fuse, and generate an answer with citations
 """
 
 from __future__ import annotations
@@ -17,30 +14,14 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-from rag.metadata import normalize_cli_metadata, DocTypeEnum, LanguageEnum, DocumentMetadata
-
-# NOTE: We'll wire model auto-download and full pipeline later.
-# from classmate.model_fetch import ensure_llama_model_available
-# from classmate.config import load_config
+from rag.metadata import normalize_cli_metadata, DocumentMetadata
+from rag.loaders import infer_doc_type_from_path
+from rag.pipeline import ingest_file, ask_question
 
 
 def _detect_doc_type_from_ext(path: Path) -> str:
-    ext = path.suffix.lower()
-    if ext in (".pdf",):
-        return "pdf"
-    if ext in (".docx",):
-        return "docx"
-    if ext in (".pptx", ".ppt"):
-        return "pptx"
-    if ext in (".md", ".markdown"):
-        return "md"
-    if ext in (".txt",):
-        return "txt"
-    if ext in (".html", ".htm"):
-        return "html"
-    if ext in (".csv",):
-        return "csv"
-    return "other"
+    # Keep as a soft helper; prefer loader inference for consistency
+    return infer_doc_type_from_path(path)
 
 
 def cmd_add(args: argparse.Namespace) -> int:
@@ -49,7 +30,7 @@ def cmd_add(args: argparse.Namespace) -> int:
         print(f"ERROR: file not found: {path}", file=sys.stderr)
         return 2
 
-    # If doc_type not provided, infer from extension
+    # If doc_type not provided, infer from extension/loaders
     doc_type = args.doc_type or _detect_doc_type_from_ext(path)
 
     meta: DocumentMetadata = normalize_cli_metadata(
@@ -62,16 +43,21 @@ def cmd_add(args: argparse.Namespace) -> int:
         tags=args.tags,
     )
 
-    # Enrich metadata with source_path; created_at will be set during ingest
-    mdict: Dict = meta.to_dict()
-    mdict["source_path"] = str(path.resolve())
-
+    try:
+        res = ingest_file(path=path, doc_meta=meta)
+    except Exception as e:
+        print(json.dumps({"action": "ingest", "file": str(path), "error": str(e)}), file=sys.stderr)
+        return 1
 
     print(json.dumps({
         "action": "ingest",
         "file": str(path),
-        "metadata": mdict,
-        "note": "This is a dry run of the CLI UX. Actual indexing will be wired in the next steps."
+        "doc_type": res.doc_type,
+        "total_pages": res.total_pages,
+        "total_chunks": res.total_chunks,
+        "upserted": res.upserted,
+        "created_at": res.created_at,
+        "metadata": meta.to_dict(),
     }, ensure_ascii=False, indent=2))
     return 0
 
@@ -92,14 +78,30 @@ def cmd_ask(args: argparse.Namespace) -> int:
         tags=args.tags,
     )
 
-    print(json.dumps({
+    hybrid = (args.hybrid == "on")
+    try:
+        res = ask_question(
+            question=question,
+            filters=meta_filters,
+            top_k=int(args.k),
+            hybrid=hybrid,
+        )
+    except Exception as e:
+        print(json.dumps({"action": "query", "error": str(e)}), file=sys.stderr)
+        return 1
+
+    # Pretty console output with answer + citations
+    output = {
         "action": "query",
-        "question": question,
-        "filters": meta_filters.to_dict(),
-        "k": args.k,
-        "hybrid": args.hybrid,
-        "note": "This is a dry run of the CLI UX. Retrieval and generation will be wired in the next steps."
-    }, ensure_ascii=False, indent=2))
+        "question": res.question,
+        "answer": res.answer,
+        "language": res.language,
+        "top_k": res.top_k,
+        "hybrid": res.hybrid,
+        "sources": [{"n": i + 1, "ref": ref} for i, ref in enumerate(res.sources)],
+        "filters": res.filters_applied,
+    }
+    print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 
 
