@@ -1,6 +1,7 @@
 # Core RAG stack
 chromadb>=0.4.24,<0.6
 rank-bm25>=0.2.2,<0.3
+numpy>=1.24,<3
 
 # Embeddings: multilingual-e5-base via Sentence-Transformers
 sentence-transformers>=2.5.1,<3
