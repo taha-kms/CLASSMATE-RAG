@@ -65,6 +65,17 @@ class ChromaVectorStore:
         import importlib
         return importlib.import_module("chromadb")
 
+    @staticmethod
+    def _normalize_host(host: str) -> str:
+        """
+        Normalize loopback names so HttpClient(host=...) and Settings(...) agree.
+        Some thin-client versions compare both and error if they differ (e.g., '127.0.0.1' vs 'localhost').
+        """
+        h = (host or "").strip().lower()
+        if h in ("127.0.0.1", "localhost", "::1", ""):
+            return "localhost"
+        return h
+
     def _ensure_client(self):
         """
         Use HTTP client if CHROMA_HTTP_URL is set (recommended on Windows),
@@ -81,7 +92,7 @@ class ChromaVectorStore:
             self._mode_http = True
 
             # Parse host/port from URL
-            host, port = "127.0.0.1", 8000
+            host, port = "localhost", 8000
             try:
                 from urllib.parse import urlparse
                 parsed = urlparse(http_url)
@@ -92,9 +103,10 @@ class ChromaVectorStore:
             except Exception:
                 pass
 
+            host = self._normalize_host(host)
+
             # Build Settings with the impl string the client expects.
-            # Some client builds want "chromadb.api.fastapi.FastAPI",
-            # others accept "rest". We'll try FastAPI first, then fallback to "rest".
+            # Prefer FastAPI impl; fall back to "rest" if needed.
             from chromadb.config import Settings
 
             def make_http_client(impl: str):
@@ -104,16 +116,16 @@ class ChromaVectorStore:
                     chroma_server_http_port=port,
                     anonymized_telemetry=False,
                 )
-                # Newer thin clients accept (settings=...) only; keep host/port for older ones
+                # Pass BOTH host/port and settings so they match exactly
                 try:
-                    return chromadb.HttpClient(settings=settings)
-                except TypeError:
                     return chromadb.HttpClient(host=host, port=port, settings=settings)
+                except TypeError:
+                    # Older signature
+                    return chromadb.HttpClient(settings=settings)
 
             try:
                 self._client = make_http_client("chromadb.api.fastapi.FastAPI")
             except Exception:
-                # Fallback for older docs/clients
                 self._client = make_http_client("rest")
 
             return self._client
