@@ -28,7 +28,7 @@ pydantic>=2.7,<3
 # Model download + env loading
 huggingface_hub>=0.23,<1
 python-dotenv>=1.0,<2
-
+hf_xet
 
 # NOTE:
 # - Torch will be pulled transitively by sentence-transformers. If you need a specific CUDA/CPU build,

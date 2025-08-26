@@ -10,10 +10,21 @@ Commands:
 
 from __future__ import annotations
 
+# --- LOAD .env EARLY (so HF cache vars take effect before imports) ---
+import os
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=True)
+except Exception:
+    pass
+# --------------------------------------------------------------------
+
 import argparse
 import json
 import sys
-from pathlib import Path
+from pathlib import Path as _Path
 from typing import Optional
 
 from rag.metadata import normalize_cli_metadata, DocumentMetadata
@@ -21,12 +32,12 @@ from rag.loaders import infer_doc_type_from_path
 from rag.pipeline import ingest_file, ask_question, retrieve_preview, index_stats
 
 
-def _detect_doc_type_from_ext(path: Path) -> str:
+def _detect_doc_type_from_ext(path: _Path) -> str:
     return infer_doc_type_from_path(path)
 
 
 def cmd_add(args: argparse.Namespace) -> int:
-    path = Path(args.path)
+    path = _Path(args.path)
     if not path.exists():
         print(f"ERROR: file not found: {path}", file=sys.stderr)
         return 2
