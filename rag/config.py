@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
-
+from rag.config import * 
 
 def _getenv_str(name: str, default: Optional[str] = None) -> Optional[str]:
     val = os.getenv(name)
