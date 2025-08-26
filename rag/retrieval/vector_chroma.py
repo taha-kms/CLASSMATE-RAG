@@ -1,15 +1,6 @@
 """
 Chroma vector store wrapper for CLASSMATE-RAG.
-
-Dual-mode client:
-- If env CHROMA_HTTP_URL is set -> use HttpClient (thin client; no default EF; no onnx)
-- Else -> use PersistentClient (full library; we still set embedding_function=None)
-
-We always supply embeddings explicitly (from E5), so we NEVER want Chroma's default
-embedding function. Passing embedding_function=None on collection creation is essential.
-
-This module lazy-imports chromadb to avoid import-time side effects on envs
-where the full library may try to init a default embedder.
+(Dual-mode HTTP/local client; embedding_function=None; lazy import)
 """
 
 from __future__ import annotations
@@ -51,6 +42,7 @@ def build_where_filter(meta_like: Mapping[str, Any]) -> Optional[Dict[str, Any]]
     Convert metadata-like dict into a Chroma 'where' filter.
     - Equality on simple fields.
     - Tags: map each requested tag to boolean field 'tag_<slug>': True (AND).
+    - IMPORTANT: ignore doc_type == "other" (placeholder).
     """
     if not meta_like:
         return None
@@ -62,8 +54,12 @@ def build_where_filter(meta_like: Mapping[str, Any]) -> Optional[Dict[str, Any]]
         v = meta_like.get(f)
         if v is None:
             continue
-        if isinstance(v, str) and not v.strip():
-            continue
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                continue
+            if f == "doc_type" and v.lower() == "other":
+                continue
         clauses.append({f: v})
 
     # Tag flags (from CLI filters)
@@ -210,6 +206,7 @@ class ChromaVectorStore:
         where: Optional[Dict[str, Any]] = None,
         top_k: int = 8,
         include_documents: bool = True,
+        include_embeddings: bool = False,
     ) -> List[Dict[str, Any]]:
         q = query_embeddings.astype("float32")
         if q.ndim == 1:
@@ -217,15 +214,17 @@ class ChromaVectorStore:
 
         col = self._ensure_collection()
 
-        # IMPORTANT: Thin HTTP server does not accept "ids" in include (IDs are always returned).
+        # Thin HTTP server does not accept "ids" in include (IDs are always returned).
         include = ["metadatas", "distances"]
         if include_documents:
             include.append("documents")
+        if include_embeddings:
+            include.append("embeddings")
 
         res = col.query(
             query_embeddings=q.tolist(),
             n_results=top_k,
-            where=where or {},
+            where=build_where_filter(where or {}) or {},
             include=include,
         )
 
@@ -233,17 +232,19 @@ class ChromaVectorStore:
         docs = (res.get("documents") or [[]])[0] if include_documents else [None] * len(ids)
         metas = (res.get("metadatas") or [[]])[0]
         dists = (res.get("distances") or [[]])[0]
+        embs = (res.get("embeddings") or [[]])[0] if include_embeddings else [None] * len(ids)
 
         out: List[Dict[str, Any]] = []
         for i in range(len(ids)):
-            out.append(
-                {
-                    "id": ids[i],
-                    "document": docs[i],
-                    "metadata": metas[i] if i < len(metas) else {},
-                    "distance": dists[i] if i < len(dists) else None,
-                }
-            )
+            item = {
+                "id": ids[i],
+                "document": docs[i] if i < len(docs) else None,
+                "metadata": metas[i] if i < len(metas) else {},
+                "distance": dists[i] if i < len(dists) else None,
+            }
+            if include_embeddings and i < len(embs) and embs[i] is not None:
+                item["embedding"] = np.array(embs[i], dtype="float32")
+            out.append(item)
         return out
 
     def count(self) -> int:
