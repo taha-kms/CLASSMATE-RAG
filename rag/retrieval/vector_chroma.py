@@ -1,6 +1,11 @@
 """
 Chroma vector store wrapper for CLASSMATE-RAG.
-(Dual-mode HTTP/local client; embedding_function=None; lazy import)
+
+Dual-mode client:
+- If env CHROMA_HTTP_URL is set -> use HttpClient (thin client; no default EF; no onnx)
+- Else -> use PersistentClient (full library; we still set embedding_function=None)
+
+We always supply embeddings explicitly (from E5).
 """
 
 from __future__ import annotations
@@ -39,17 +44,16 @@ def _parse_tags(obj) -> List[str]:
 
 def build_where_filter(meta_like: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    Convert metadata-like dict into a Chroma 'where' filter.
+    Build a Chroma 'where' dict from simple CLI-style filters.
     - Equality on simple fields.
-    - Tags: map each requested tag to boolean field 'tag_<slug>': True (AND).
-    - IMPORTANT: ignore doc_type == "other" (placeholder).
+    - Tags become boolean flags: tag_<slug>: True
+    - Ignore placeholder doc_type="other".
     """
     if not meta_like:
         return None
 
     clauses: List[Dict[str, Any]] = []
 
-    # Simple equality fields
     for f in ["course", "unit", "language", "doc_type", "author", "semester"]:
         v = meta_like.get(f)
         if v is None:
@@ -62,9 +66,7 @@ def build_where_filter(meta_like: Mapping[str, Any]) -> Optional[Dict[str, Any]]
                 continue
         clauses.append({f: v})
 
-    # Tag flags (from CLI filters)
-    tag_items = _parse_tags(meta_like.get("tags"))
-    for t in tag_items:
+    for t in _parse_tags(meta_like.get("tags")):
         slug = _slug_tag(t)
         if slug:
             clauses.append({f"tag_{slug}": True})
@@ -203,7 +205,7 @@ class ChromaVectorStore:
         self,
         *,
         query_embeddings: np.ndarray,
-        where: Optional[Dict[str, Any]] = None,
+        where: Optional[Dict[str, Any]] = None,  # already Chroma-style
         top_k: int = 8,
         include_documents: bool = True,
         include_embeddings: bool = False,
@@ -214,19 +216,22 @@ class ChromaVectorStore:
 
         col = self._ensure_collection()
 
-        # Thin HTTP server does not accept "ids" in include (IDs are always returned).
         include = ["metadatas", "distances"]
         if include_documents:
             include.append("documents")
         if include_embeddings:
             include.append("embeddings")
 
-        res = col.query(
+        kwargs = dict(
             query_embeddings=q.tolist(),
             n_results=top_k,
-            where=build_where_filter(where or {}) or {},
             include=include,
         )
+        # Only include 'where' when we actually have one
+        if where:
+            kwargs["where"] = where
+
+        res = col.query(**kwargs)
 
         ids = (res.get("ids") or [[]])[0]
         docs = (res.get("documents") or [[]])[0] if include_documents else [None] * len(ids)

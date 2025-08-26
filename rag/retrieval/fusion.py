@@ -27,7 +27,6 @@ def rrf_fuse(
         weights = [1.0] * n
     elif len(weights) != n:
         raise ValueError("weights length must match rank_lists length")
-
     scores: Dict[str, float] = {}
     for li, ids in enumerate(rank_lists):
         w = float(weights[li])
@@ -37,34 +36,17 @@ def rrf_fuse(
     return scores
 
 
-def _mmr_order(
-    q: np.ndarray,            # (D,) normalized
-    cands: np.ndarray,        # (N, D) normalized embeddings
-    ids: List[str],
-    k: int,
-    lambd: float = 0.5,
-) -> List[int]:
-    """
-    Maximal Marginal Relevance selection order.
-    Select up to k indices maximizing λ*sim(q,c) - (1-λ)*max_sim(c, S).
-    Assumes cosine (dot) with L2-normalized vectors.
-    """
+def _mmr_order(q: np.ndarray, cands: np.ndarray, ids: List[str], k: int, lambd: float = 0.5) -> List[int]:
     if len(ids) == 0:
         return []
-
     q = q.reshape(1, -1).astype("float32")
-    sims_q = (cands @ q.T).ravel()  # similarity to query
-    # Precompute candidate-candidate sims for diversity term
+    sims_q = (cands @ q.T).ravel()
     sims_cc = cands @ cands.T
-
     selected: List[int] = []
     remaining = set(range(len(ids)))
-
-    # seed with best to query
     first = int(np.argmax(sims_q))
     selected.append(first)
     remaining.discard(first)
-
     while remaining and len(selected) < min(k, len(ids)):
         best_idx = None
         best_score = -1e9
@@ -76,7 +58,6 @@ def _mmr_order(
                 best_idx = i
         selected.append(int(best_idx))
         remaining.discard(int(best_idx))
-
     return selected
 
 
@@ -92,60 +73,36 @@ class HybridRetriever:
     weight_vector: float = 1.0
     weight_bm25: float = 1.0
 
-    # New knobs for Step 13
     use_mmr: bool = True
     mmr_lambda: float = 0.5
-    mmr_max_pool: int = 24   # consider up to this many vec hits before diversification
+    mmr_max_pool: int = 24
 
-    def _vector_search(
-        self,
-        *,
-        query: str,
-        where: Optional[Mapping[str, object]],
-        k: int,
-    ) -> List[Mapping[str, object]]:
-        # Encode query
-        q_vec = self.embedder.encode_queries([query])[0]  # (D,)
-
-        # Pull a pool larger than k when using MMR, and include embeddings
+    def _vector_search(self, *, query: str, where: Optional[Mapping[str, object]], k: int) -> List[Mapping[str, object]]:
+        q_vec = self.embedder.encode_queries([query])[0]
         pool_size = max(k, self.mmr_max_pool) if self.use_mmr else k
         res = self.vector_store.query(
             query_embeddings=q_vec,
-            where=where or {},
+            where=where,                     # pass Chroma-style where (or None)
             top_k=pool_size,
             include_documents=True,
             include_embeddings=self.use_mmr,
         )
-
         if not self.use_mmr:
             return res[:k]
-
-        # Collect candidate embeddings
-        ids = []
-        embs = []
+        ids, embs = [], []
         for r in res:
             if "embedding" in r and isinstance(r["embedding"], np.ndarray):
                 ids.append(r["id"])
                 embs.append(r["embedding"])
         if not ids:
             return res[:k]
-
-        cand = np.stack(embs, axis=0)  # (N,D) already normalized by e5 pipeline
+        cand = np.stack(embs, axis=0)
         order = _mmr_order(q=q_vec, cands=cand, ids=ids, k=k, lambd=self.mmr_lambda)
-
-        # Re-order the res list by MMR order, preserving docs/metadata/distances
         id_to_item = {r["id"]: r for r in res}
-        mmr_ids = [ids[i] for i in order]
-        mmr_res = [id_to_item[i] for i in mmr_ids if i in id_to_item]
-        return mmr_res
+        return [id_to_item[ids[i]] for i in order if ids[i] in id_to_item]
 
-    def _bm25_search(
-        self,
-        *,
-        query: str,
-        where: Optional[Mapping[str, object]],
-        k: int,
-    ) -> List[Mapping[str, object]]:
+    def _bm25_search(self, *, query: str, where: Optional[Mapping[str, object]], k: int) -> List[Mapping[str, object]]:
+        # BM25 expects simple metadata dict (not Chroma '$and' format)
         return self.bm25_store.search(query=query, where=where, top_k=k)
 
     def retrieve(
@@ -156,16 +113,18 @@ class HybridRetriever:
         top_k: int = 8,
         hybrid: bool = True,
     ) -> List[Dict[str, object]]:
-        where = build_where_filter(filters or {}) if filters else None
+        raw_filters = filters or {}
+        chroma_where = build_where_filter(raw_filters) if raw_filters else None
+        bm_where = raw_filters or None
 
         vec_res: List[Mapping[str, object]] = []
         bm25_res: List[Mapping[str, object]] = []
 
         if hybrid:
-            vec_res = self._vector_search(query=question, where=where, k=self.k_vector)
-            bm25_res = self._bm25_search(query=question, where=where, k=self.k_bm25)
+            vec_res = self._vector_search(query=question, where=chroma_where, k=self.k_vector)
+            bm25_res = self._bm25_search(query=question, where=bm_where, k=self.k_bm25)
         else:
-            vec_res = self._vector_search(query=question, where=where, k=max(top_k, self.k_vector))
+            vec_res = self._vector_search(query=question, where=chroma_where, k=max(top_k, self.k_vector))
 
         vec_ids = [r["id"] for r in vec_res]
         bm_ids = [r["id"] for r in bm25_res]
@@ -177,23 +136,16 @@ class HybridRetriever:
         )
 
         by_id: Dict[str, Dict[str, object]] = {}
-
         for r in vec_res:
             _id = r["id"]
-            item = by_id.setdefault(
-                _id,
-                {"id": _id, "document": None, "metadata": {}, "scores": {"vector_distance": None, "bm25_score": None, "fused": 0.0}},
-            )
+            item = by_id.setdefault(_id, {"id": _id, "document": None, "metadata": {}, "scores": {"vector_distance": None, "bm25_score": None, "fused": 0.0}})
             item["document"] = item["document"] or r.get("document")
             item["metadata"] = item["metadata"] or r.get("metadata") or {}
             item["scores"]["vector_distance"] = r.get("distance")
 
         for r in bm25_res:
             _id = r["id"]
-            item = by_id.setdefault(
-                _id,
-                {"id": _id, "document": None, "metadata": {}, "scores": {"vector_distance": None, "bm25_score": None, "fused": 0.0}},
-            )
+            item = by_id.setdefault(_id, {"id": _id, "document": None, "metadata": {}, "scores": {"vector_distance": None, "bm25_score": None, "fused": 0.0}})
             if not item["document"] and r.get("document"):
                 item["document"] = r.get("document")
             if not item["metadata"] and r.get("metadata"):

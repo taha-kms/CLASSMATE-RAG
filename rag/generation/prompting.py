@@ -5,9 +5,9 @@ Prompt construction for grounded Q&A (EN/IT) using Llama 3.1.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
-from rag.utils.lang_detect import detect_lang_tag
+from rag.utils import detect_lang_tag
 
 
 def choose_answer_language(
@@ -55,7 +55,7 @@ def format_context_blocks(
         meta = r.get("metadata") or {}
         pv = _format_provenance(meta)
         blk = f"[{i}] {pv}\n{doc}".strip()
-        blk_len = len(blk) + (2 if blocks else 0)  # account for joins
+        blk_len = len(blk) + (2 if blocks else 0)
         if max_total_chars is not None and used + blk_len > max_total_chars:
             break
         blocks.append(blk)
@@ -82,34 +82,65 @@ def build_grounded_messages(
 
     now = datetime.utcnow().strftime("%Y-%m-%d")
     system_en = (
-        "You are CLASSMATE-RAG, a helpful study assistant. "
-        "Answer strictly using the provided context. "
-        "Cite sources inline using [n]. If the answer is not in the context, say you don't know."
+        "You are CLASSMATE-RAG, a helpful study assistant.\n"
+        "Use the provided context blocks to answer and cite them inline as [n].\n"
+        "If the answer is not in the context, reply: \"I don't know.\""
     )
     system_it = (
-        "Sei CLASSMATE-RAG, un assistente allo studio. "
-        "Rispondi solo utilizzando il contesto fornito. "
-        "Cita le fonti nel testo usando [n]. Se la risposta non è nel contesto, dillo chiaramente."
+        "Sei CLASSMATE-RAG, un assistente allo studio.\n"
+        "Usa i blocchi di contesto forniti per rispondere e cita nel testo come [n].\n"
+        "Se la risposta non è nel contesto, rispondi: \"Non lo so.\""
     )
     system_msg = system_it if lang == "it" else system_en
 
-    user_intro_en = (
+    user_en = (
         f"Date: {now}\n"
-        "Use only these context blocks to answer. Cite as [n].\n\n"
+        "Context blocks:\n"
         f"{context_text}\n\n"
         f"Question: {question}\n"
         f"Answer in English. Keep it {style}."
     )
-    user_intro_it = (
+    user_it = (
         f"Data: {now}\n"
-        "Usa solo questi blocchi di contesto per rispondere. Cita come [n].\n\n"
+        "Blocchi di contesto:\n"
         f"{context_text}\n\n"
         f"Domanda: {question}\n"
         f"Rispondi in italiano. Mantieni uno stile {style}."
     )
-    user_msg = user_intro_it if lang == "it" else user_intro_en
+    user_msg = user_it if lang == "it" else user_en
 
     return [
         {"role": "system", "content": system_msg},
         {"role": "user", "content": user_msg},
+    ]
+
+
+def build_general_messages(
+    *,
+    question: str,
+    language: str = "en",
+    style: str = "concise",
+) -> List[Dict[str, str]]:
+    """
+    Fallback prompt: give a short general-definition style answer with NO citations.
+    """
+    if language not in {"en", "it"}:
+        language = "en"
+
+    system_en = (
+        "You are a helpful study assistant.\n"
+        "Provide a short, clear definition or explanation from general knowledge.\n"
+        "Do NOT invent citations. Do NOT use [n]."
+    )
+    system_it = (
+        "Sei un assistente allo studio.\n"
+        "Fornisci una breve definizione o spiegazione basata su conoscenze generali.\n"
+        "Non inventare citazioni. Non usare [n]."
+    )
+    user_en = f"Question: {question}\nAnswer in English. Keep it {style} (2–4 sentences)."
+    user_it = f"Domanda: {question}\nRispondi in italiano. Mantieni uno stile {style} (2–4 frasi)."
+
+    return [
+        {"role": "system", "content": system_it if language == "it" else system_en},
+        {"role": "user", "content": user_it if language == "it" else user_en},
     ]

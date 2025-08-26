@@ -30,9 +30,9 @@ from rag.retrieval.fusion import HybridRetriever
 from rag.generation import (
     LlamaCppRunner,
     build_grounded_messages,
+    build_general_messages, 
     format_context_blocks,
 )
-
 
 @dataclass
 class IngestResult:
@@ -232,6 +232,20 @@ def ingest_file(
     )
 
 
+
+# ... AskResult dataclass unchanged ...
+
+def _looks_unknown(ans: str, lang: str) -> bool:
+    a = (ans or "").strip().lower()
+    if not a:
+        return True
+    if lang == "it":
+        return ("non lo so" in a) or ("non so" in a)
+    return ("i don't know" in a) or ("i dont know" in a)
+
+
+
+
 # -----------------------------
 # Ask
 # -----------------------------
@@ -243,9 +257,6 @@ def ask_question(
     top_k: int = 8,
     hybrid: bool = True,
 ) -> AskResult:
-    """
-    Run hybrid retrieval with filters, then generate a grounded answer with citations.
-    """
     cfg = load_config()
 
     vec_store = ChromaVectorStore.from_config()
@@ -264,7 +275,6 @@ def ask_question(
     )
 
     where = filters.to_dict()
-
     results = retriever.retrieve(
         question=question,
         filters=where,
@@ -281,20 +291,28 @@ def ask_question(
         contexts=results,
         forced_language=forced_lang,
         default_language=str(cfg.default_language),
-        max_context_chars=3500,  # fits comfortably with n_ctx≈4096 and answer tokens
+        max_context_chars=3500,
     )
+    # language we asked for
+    lang = "it" if (forced_lang == "it") else "en"
 
-    _, prov = format_context_blocks(results)
+    context_text, prov = format_context_blocks(results)
 
     runner = LlamaCppRunner()
-    answer = runner.chat(messages)
+    answer = runner.chat(messages).strip()
 
-    final_lang = "it" if ("Rispondi in italiano" in messages[-1]["content"]) else "en"
+    # Fallback: if model says it doesn't know (or empty), provide a short general definition without citations
+    if _looks_unknown(answer, lang):
+        fallback_msgs = build_general_messages(question=question, language=lang, style="concise")
+        fallback = runner.chat(fallback_msgs).strip()
+        if fallback:
+            note = " (General knowledge — no in-corpus source)" if lang == "en" else " (Conoscenza generale — nessuna fonte nel corpus)"
+            answer = fallback + note
 
     return AskResult(
         question=question,
-        answer=answer.strip(),
-        language=final_lang,
+        answer=answer,
+        language=lang,
         top_k=int(top_k),
         sources=prov,
         retrieved=results,
