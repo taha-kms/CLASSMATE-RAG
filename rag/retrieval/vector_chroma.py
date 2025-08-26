@@ -1,6 +1,15 @@
 """
 Chroma vector store wrapper for CLASSMATE-RAG.
-(Dual-mode HTTP/local client; embedding_function=None; lazy import)
+
+Dual-mode client:
+- If env CHROMA_HTTP_URL is set -> use HttpClient (thin client; no default EF; no onnx)
+- Else -> use PersistentClient (full library; we still set embedding_function=None)
+
+We always supply embeddings explicitly (from E5), so we NEVER want Chroma's default
+embedding function. Passing embedding_function=None on collection creation is essential.
+
+This module lazy-imports chromadb to avoid import-time side effects on envs
+where the full library may try to init a default embedder.
 """
 
 from __future__ import annotations
@@ -207,7 +216,9 @@ class ChromaVectorStore:
             q = q[None, :]
 
         col = self._ensure_collection()
-        include = ["ids", "metadatas", "distances"]
+
+        # IMPORTANT: Thin HTTP server does not accept "ids" in include (IDs are always returned).
+        include = ["metadatas", "distances"]
         if include_documents:
             include.append("documents")
 
