@@ -5,8 +5,6 @@ End-to-end RAG pipeline used by the CLI.
   embeds with e5, and upserts into Chroma (vector) and BM25 (lexical) stores.
 - ask_question(): runs filtered hybrid retrieval, builds grounded messages,
   and generates an answer with Llama 3.1 (llama.cpp), returning answer + provenance.
-
-This module intentionally stays framework-agnostic for easy reuse in tests.
 """
 
 from __future__ import annotations
@@ -27,7 +25,7 @@ from rag.loaders import (
 from rag.chunking import chunk_pages
 from rag.utils import detect_lang_tag, stable_chunk_id
 from rag.embeddings import E5MultilingualEmbedder
-from rag.retrieval import ChromaVectorStore, BM25Store, build_where_filter
+from rag.retrieval import ChromaVectorStore, BM25Store
 from rag.retrieval.fusion import HybridRetriever
 from rag.generation import (
     LlamaCppRunner,
@@ -52,10 +50,77 @@ class AskResult:
     answer: str
     language: str
     top_k: int
-    sources: List[str]                # provenance list [n] -> "path#p:c"
-    retrieved: List[Dict[str, object]]  # fused retrieval items (id, document, metadata, scores)
+    sources: List[str]
+    retrieved: List[Dict[str, object]]
     filters_applied: Dict[str, object]
     hybrid: bool
+
+
+# -----------------------------
+# Helpers (metadata sanitization)
+# -----------------------------
+
+def _slug_tag(t: str) -> str:
+    import re
+    s = (t or "").lower().strip()
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    return s.strip("_")
+
+
+def _parse_tags(obj) -> List[str]:
+    if not obj:
+        return []
+    if isinstance(obj, (list, tuple)):
+        vals = [str(x) for x in obj]
+    else:
+        vals = str(obj).split(",")
+    out = []
+    for v in vals:
+        v = v.strip()
+        if v:
+            out.append(v)
+    return out
+
+
+def _expand_tag_flags(tags_field) -> Dict[str, bool]:
+    flags: Dict[str, bool] = {}
+    for t in _parse_tags(tags_field):
+        slug = _slug_tag(t)
+        if slug:
+            flags[f"tag_{slug}"] = True
+    return flags
+
+
+def _sanitize_metadata(meta: Dict[str, object]) -> Dict[str, object]:
+    """
+    Keep only types allowed by the thin client: str, int, float, bool.
+    Drop None/empty. Convert tags -> tag_* booleans. Keep page/chunk_id ints.
+    """
+    clean: Dict[str, object] = {}
+
+    # Expand tag flags first, then drop original 'tags'
+    if "tags" in meta:
+        clean.update(_expand_tag_flags(meta.get("tags")))
+    # Core fields
+    for k in (
+        "course", "unit", "language", "doc_type", "author",
+        "semester", "source_path", "created_at", "page", "chunk_id"
+    ):
+        v = meta.get(k)
+        if v is None:
+            continue
+        if isinstance(v, (str, int, float, bool)):
+            # skip empty strings
+            if isinstance(v, str) and not v.strip():
+                continue
+            clean[k] = v
+        else:
+            # cast everything else to str (e.g., Paths)
+            s = str(v).strip()
+            if s:
+                clean[k] = s
+
+    return clean
 
 
 # -----------------------------
@@ -75,7 +140,6 @@ def ingest_file(
     if not p.exists():
         raise FileNotFoundError(f"File not found: {p}")
 
-    # Determine document type (prefer CLI-provided; otherwise infer)
     doc_type = (doc_meta.doc_type.value if doc_meta.doc_type else None) or infer_doc_type_from_path(p)
 
     # Load into (page, text) pairs
@@ -92,17 +156,16 @@ def ingest_file(
 
     created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Build per-chunk metadata + IDs + documents list
+    # Prepare containers
     ids: List[str] = []
     texts: List[str] = []
     metas: List[Dict[str, object]] = []
 
-    # Prepare stores/embeddings
+    # Components
     embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create("./indexes/bm25")
 
-    # Decide base language to use
     base_lang = doc_meta.language.value if doc_meta.language else "auto"
 
     for (page, chunk_id, text) in chunks:
@@ -114,19 +177,20 @@ def ingest_file(
         if lang == "auto" and cfg.enable_language_detection:
             lang = detect_lang_tag(text)
 
-        meta = {
+        raw_meta = {
             "course": doc_meta.course,
             "unit": doc_meta.unit,
             "language": lang,
             "doc_type": doc_type,
             "author": doc_meta.author,
             "semester": doc_meta.semester,
-            "tags": doc_meta.tags,
+            "tags": doc_meta.tags,           # will be expanded to tag_* booleans
             "source_path": str(p),
             "page": int(page),
             "chunk_id": int(chunk_id),
             "created_at": created_at,
         }
+        meta = _sanitize_metadata(raw_meta)
 
         cid = stable_chunk_id(
             source_path=p,
@@ -151,11 +215,10 @@ def ingest_file(
             created_at=created_at,
         )
 
-    # Embed passages and upsert
-    emb = embedder.encode_passages(texts)  # np.ndarray (N, D)
+    # Embed & upsert
+    emb = embedder.encode_passages(texts)
     vec_store.upsert(ids=ids, documents=texts, metadatas=metas, embeddings=emb)
 
-    # Upsert into BM25 and persist
     bm25_store.upsert_many(ids=ids, texts=texts, metadatas=metas)
     bm25_store.save()
 
@@ -185,7 +248,6 @@ def ask_question(
     """
     cfg = load_config()
 
-    # Build stores + embedder + retriever
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create("./indexes/bm25")
     embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
@@ -202,6 +264,7 @@ def ask_question(
     )
 
     where = filters.to_dict()
+
     results = retriever.retrieve(
         question=question,
         filters=where,
@@ -209,10 +272,10 @@ def ask_question(
         hybrid=bool(hybrid),
     )
 
-    # Build prompt messages and generate
     forced_lang = None
     if filters.language and filters.language.value in ("en", "it"):
         forced_lang = filters.language.value
+
     messages = build_grounded_messages(
         question=question,
         contexts=results,
@@ -220,13 +283,11 @@ def ask_question(
         default_language=str(cfg.default_language),
     )
 
-    # Also compute provenance/sources for CLI display
-    context_text, prov = format_context_blocks(results)
+    _, prov = format_context_blocks(results)
 
     runner = LlamaCppRunner()
     answer = runner.chat(messages)
 
-    # Decide final language label for reporting
     final_lang = "it" if ("Rispondi in italiano" in messages[-1]["content"]) else "en"
 
     return AskResult(
