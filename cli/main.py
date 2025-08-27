@@ -10,6 +10,9 @@ Commands:
   - show (--id ID ... | --path PATH)
   - delete [--id ID ... | --path PATH | filter flags] [--dry-run]
   - reingest (--path PATH ... | --id ID ... | filter flags)
+
+Notes:
+- Pass --fixup to auto-trim fields and slug tags at the CLI boundary (Step 16).
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ from pathlib import Path as _Path
 from typing import Optional, List
 
 from rag.metadata import normalize_cli_metadata, DocumentMetadata
+from rag.metadata.validation import validate_cli_metadata
 from rag.loaders import infer_doc_type_from_path
 from rag.pipeline import ingest_file, ask_question, retrieve_preview, index_stats
 from rag.admin.manage import (
@@ -48,22 +52,51 @@ def _detect_doc_type_from_ext(path: _Path) -> str:
     return infer_doc_type_from_path(path)
 
 
+def _validated_meta_from_args(
+    *,
+    args: argparse.Namespace,
+    inferred_doc_type: str | None = None,
+    explicit_doc_type: bool = False,
+) -> DocumentMetadata:
+    raw = {
+        "course": args.course,
+        "unit": args.unit,
+        "language": args.language,
+        "doc_type": args.doc_type,
+        "author": args.author,
+        "semester": args.semester,
+        "tags": args.tags,
+    }
+    clean = validate_cli_metadata(
+        raw,
+        fixup=bool(getattr(args, "fixup", False)),
+        inferred_doc_type=inferred_doc_type,
+        explicit_doc_type=explicit_doc_type,
+    )
+    # Hand off to existing normalizer to produce DocumentMetadata (enums etc.)
+    meta: DocumentMetadata = normalize_cli_metadata(
+        course=clean.get("course"),
+        unit=clean.get("unit"),
+        language=clean.get("language"),
+        doc_type=clean.get("doc_type"),
+        author=clean.get("author"),
+        semester=clean.get("semester"),
+        tags=clean.get("tags"),
+    )
+    return meta
+
+
 def cmd_add(args: argparse.Namespace) -> int:
     path = _Path(args.path)
     if not path.exists():
         print(f"ERROR: file not found: {path}", file=sys.stderr)
         return 2
 
-    doc_type = args.doc_type or _detect_doc_type_from_ext(path)
-
-    meta: DocumentMetadata = normalize_cli_metadata(
-        course=args.course,
-        unit=args.unit,
-        language=args.language,
-        doc_type=doc_type,
-        author=args.author,
-        semester=args.semester,
-        tags=args.tags,
+    inferred_dt = _detect_doc_type_from_ext(path)
+    meta = _validated_meta_from_args(
+        args=args,
+        inferred_doc_type=inferred_dt,
+        explicit_doc_type=(args.doc_type is not None),
     )
 
     try:
@@ -91,15 +124,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
         print("ERROR: question cannot be empty", file=sys.stderr)
         return 2
 
-    meta_filters: DocumentMetadata = normalize_cli_metadata(
-        course=args.course,
-        unit=args.unit,
-        language=args.language,
-        doc_type=args.doc_type,
-        author=args.author,
-        semester=args.semester,
-        tags=args.tags,
-    )
+    meta_filters: DocumentMetadata = _validated_meta_from_args(args=args)
 
     hybrid = (args.hybrid == "on")
     try:
@@ -133,15 +158,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
         print("ERROR: question cannot be empty", file=sys.stderr)
         return 2
 
-    meta_filters: DocumentMetadata = normalize_cli_metadata(
-        course=args.course,
-        unit=args.unit,
-        language=args.language,
-        doc_type=args.doc_type,
-        author=args.author,
-        semester=args.semester,
-        tags=args.tags,
-    )
+    meta_filters: DocumentMetadata = _validated_meta_from_args(args=args)
 
     hybrid = (args.hybrid == "on")
     try:
@@ -176,19 +193,10 @@ def cmd_stats(_args: argparse.Namespace) -> int:
     return 0
 
 
-# ---------- Step 15: ingestion management ----------
+# ---------- Step 15/16: ingestion management + validation ----------
 
 def _filters_from_args(args: argparse.Namespace) -> dict:
-    meta = normalize_cli_metadata(
-        course=args.course,
-        unit=args.unit,
-        language=args.language,
-        doc_type=args.doc_type,
-        author=args.author,
-        semester=args.semester,
-        tags=args.tags,
-    )
-    return meta.to_dict()
+    return _validated_meta_from_args(args=args).to_dict()
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -317,6 +325,7 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--author", type=str, help="Author or source")
     pa.add_argument("--semester", type=str, help="Semester label (e.g., 2025S)")
     pa.add_argument("--tags", type=str, help="Comma-separated tags (e.g., exam,week1,lab)")
+    pa.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pa.set_defaults(func=cmd_add)
 
     # ask
@@ -331,6 +340,7 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--tags", type=str, help="Filter by comma-separated tags")
     pq.add_argument("--k", type=int, default=8, help="Top-K results after fusion")
     pq.add_argument("--hybrid", type=str, choices=["on", "off"], default="on", help="Use hybrid retrieval (vector+BM25)")
+    pq.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pq.set_defaults(func=cmd_ask)
 
     # preview
@@ -345,6 +355,7 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--tags", type=str, help="Filter by comma-separated tags")
     pp.add_argument("--k", type=int, default=8, help="Top-K to preview")
     pp.add_argument("--hybrid", type=str, choices=["on", "off"], default="on", help="Use hybrid retrieval")
+    pp.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pp.set_defaults(func=cmd_preview)
 
     # stats
@@ -362,6 +373,7 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
     pl.add_argument("--limit", type=int, default=50, help="Max items")
     pl.add_argument("--offset", type=int, default=0, help="Offset for paging")
+    pl.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pl.set_defaults(func=cmd_list)
 
     # show
@@ -382,6 +394,7 @@ def build_parser() -> argparse.ArgumentParser:
     pdel.add_argument("--semester", type=str, help="Filter by semester")
     pdel.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
     pdel.add_argument("--dry-run", action="store_true", help="Preview what would be deleted")
+    pdel.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pdel.set_defaults(func=cmd_delete)
 
     # reingest
@@ -396,6 +409,7 @@ def build_parser() -> argparse.ArgumentParser:
     pre.add_argument("--semester", type=str, help="Filter by semester")
     pre.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
     pre.add_argument("--dry-run", action="store_true", help="Preview which files would be reingested")
+    pre.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pre.set_defaults(func=cmd_reingest)
 
     return p
