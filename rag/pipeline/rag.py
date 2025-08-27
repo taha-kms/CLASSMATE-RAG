@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+import os
 import numpy as np
 
 from rag.config import load_config
@@ -33,6 +34,7 @@ from rag.generation import (
     build_general_messages, 
     format_context_blocks,
 )
+from rag.generation.post import enforce_citations
 
 @dataclass
 class IngestResult:
@@ -308,6 +310,21 @@ def ask_question(
         if fallback:
             note = " (General knowledge — no in-corpus source)" if lang == "en" else " (Conoscenza generale — nessuna fonte nel corpus)"
             answer = fallback + note
+
+    # --- Step 18: citation integrity (STRICT_CITATIONS) ---
+    strict_flag = (
+        bool(getattr(cfg, "strict_citations", False)) or
+        str(os.getenv("STRICT_CITATIONS", "")).strip().lower() in {"1", "true", "yes"}
+    )
+    if strict_flag:
+        # Optionally append a "Sources" block if configured via env
+        add_sources = str(os.getenv("APPEND_SOURCES_BLOCK", "")).strip().lower() in {"1", "true", "yes"}
+        answer = enforce_citations(
+            answer=answer,
+            provenance=prov,
+            add_sources_block=add_sources,
+            sources_title="Sources" if lang == "en" else "Fonti",
+        )
 
     return AskResult(
         question=question,
