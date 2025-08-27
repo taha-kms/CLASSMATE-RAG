@@ -6,6 +6,10 @@ Commands:
   - ask "<question>" [filter flags]
   - preview "<question>" [filter flags]   -> retrieval-only, shows contexts/scores
   - stats                                  -> index health (counts + disk usage)
+  - dump --path dumps/corpus.jsonl [--no-emb]
+  - restore --path dumps/corpus.jsonl
+  - vacuum
+  - rebuild --model intfloat/multilingual-e5-base
   - list [filter flags] [--limit N --offset M]
   - show (--id ID ... | --path PATH)
   - delete [--id ID ... | --path PATH | filter flags] [--dry-run]
@@ -45,6 +49,7 @@ from rag.admin.manage import (
     reingest_paths,
     list_source_paths,
 )
+from rag.admin.backup import dump_index, restore_dump, vacuum_indexes, rebuild_embeddings
 
 
 def _detect_doc_type_from_ext(path: _Path) -> str:
@@ -189,6 +194,49 @@ def cmd_stats(_args: argparse.Namespace) -> int:
         print(json.dumps({"action": "stats", "error": str(e)}), file=sys.stderr)
         return 1
     print(json.dumps({"action": "stats", **s}, ensure_ascii=False, indent=2))
+    return 0
+
+
+# ---------- Backup / Export / Migration ----------
+
+def cmd_dump(args: argparse.Namespace) -> int:
+    include_emb = not bool(args.no_emb)
+    try:
+        n = dump_index(args.path, include_embedding_checksum=include_emb, batch_size=int(args.batch_size))
+    except Exception as e:
+        print(json.dumps({"action": "dump", "error": str(e)}), file=sys.stderr)
+        return 1
+    print(json.dumps({"action": "dump", "path": args.path, "wrote": n, "include_embedding_checksum": include_emb}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    try:
+        n = restore_dump(args.path, batch_size=int(args.batch_size))
+    except Exception as e:
+        print(json.dumps({"action": "restore", "error": str(e)}), file=sys.stderr)
+        return 1
+    print(json.dumps({"action": "restore", "path": args.path, "restored": n}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_vacuum(_args: argparse.Namespace) -> int:
+    try:
+        status = vacuum_indexes()
+    except Exception as e:
+        print(json.dumps({"action": "vacuum", "error": str(e)}), file=sys.stderr)
+        return 1
+    print(json.dumps({"action": "vacuum", **status}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_rebuild(args: argparse.Namespace) -> int:
+    try:
+        out = rebuild_embeddings(args.model, batch_size=int(args.batch_size))
+    except Exception as e:
+        print(json.dumps({"action": "rebuild", "error": str(e)}), file=sys.stderr)
+        return 1
+    print(json.dumps({"action": "rebuild", **out}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -360,6 +408,29 @@ def build_parser() -> argparse.ArgumentParser:
     # stats
     ps = sub.add_parser("stats", help="Show index health and disk usage")
     ps.set_defaults(func=cmd_stats)
+
+    # dump
+    pd = sub.add_parser("dump", help="Export corpus to a JSONL dump")
+    pd.add_argument("--path", required=True, help="Output JSONL path (e.g., dumps/corpus.jsonl)")
+    pd.add_argument("--batch-size", type=int, default=256, help="Batch size for embedding checksum")
+    pd.add_argument("--no-emb", action="store_true", help="Do not compute embedding checksums (faster, smaller)")
+    pd.set_defaults(func=cmd_dump)
+
+    # restore
+    pr = sub.add_parser("restore", help="Restore indexes from a JSONL dump")
+    pr.add_argument("--path", required=True, help="Input JSONL path")
+    pr.add_argument("--batch-size", type=int, default=256, help="Batch size for re-embedding")
+    pr.set_defaults(func=cmd_restore)
+
+    # vacuum
+    pv = sub.add_parser("vacuum", help="Compact/housekeep indexes (best-effort)")
+    pv.set_defaults(func=cmd_vacuum)
+
+    # rebuild
+    prebuild = sub.add_parser("rebuild", help="Re-embed all texts with a new embedding model")
+    prebuild.add_argument("--model", required=True, help="New embedding model name/path")
+    prebuild.add_argument("--batch-size", type=int, default=256, help="Batch size for re-embedding")
+    prebuild.set_defaults(func=cmd_rebuild)
 
     # list
     pl = sub.add_parser("list", help="List indexed chunks by metadata filters")
