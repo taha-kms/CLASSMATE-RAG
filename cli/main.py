@@ -6,6 +6,10 @@ Commands:
   - ask "<question>" [filter flags]
   - preview "<question>" [filter flags]   -> retrieval-only, shows contexts/scores
   - stats                                  -> index health (counts + disk usage)
+  - list [filter flags] [--limit N --offset M]
+  - show (--id ID ... | --path PATH)
+  - delete [--id ID ... | --path PATH | filter flags] [--dry-run]
+  - reingest (--path PATH ... | --id ID ... | filter flags)
 """
 
 from __future__ import annotations
@@ -25,11 +29,19 @@ import argparse
 import json
 import sys
 from pathlib import Path as _Path
-from typing import Optional
+from typing import Optional, List
 
 from rag.metadata import normalize_cli_metadata, DocumentMetadata
 from rag.loaders import infer_doc_type_from_path
 from rag.pipeline import ingest_file, ask_question, retrieve_preview, index_stats
+from rag.admin.manage import (
+    list_entries,
+    show_entries_by_id,
+    resolve_ids,
+    delete_by_ids,
+    reingest_paths,
+    list_source_paths,
+)
 
 
 def _detect_doc_type_from_ext(path: _Path) -> str:
@@ -164,6 +176,133 @@ def cmd_stats(_args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------- Step 15: ingestion management ----------
+
+def _filters_from_args(args: argparse.Namespace) -> dict:
+    meta = normalize_cli_metadata(
+        course=args.course,
+        unit=args.unit,
+        language=args.language,
+        doc_type=args.doc_type,
+        author=args.author,
+        semester=args.semester,
+        tags=args.tags,
+    )
+    return meta.to_dict()
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    where = _filters_from_args(args)
+    entries = list_entries(where=where, limit=args.limit, offset=args.offset)
+    out = {
+        "action": "list",
+        "count": len(entries),
+        "filters": where,
+        "items": [
+            {
+                "id": e.id,
+                "source_path": e.metadata.get("source_path"),
+                "page": e.metadata.get("page"),
+                "chunk_id": e.metadata.get("chunk_id"),
+                "language": e.metadata.get("language"),
+                "doc_type": e.metadata.get("doc_type"),
+                "author": e.metadata.get("author"),
+                "course": e.metadata.get("course"),
+                "unit": e.metadata.get("unit"),
+                "semester": e.metadata.get("semester"),
+            }
+            for e in entries
+        ],
+    }
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    if not args.id and not args.path:
+        print("ERROR: show requires --id or --path", file=sys.stderr)
+        return 2
+
+    if args.id:
+        entries = show_entries_by_id(args.id)
+    else:
+        ids = resolve_ids(path=args.path)
+        entries = show_entries_by_id(ids)
+
+    out = {
+        "action": "show",
+        "items": [
+            {
+                "id": e.id,
+                "metadata": e.metadata,
+                "snippet": (e.text or "")[:1000],
+            }
+            for e in entries
+        ],
+    }
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_delete(args: argparse.Namespace) -> int:
+    # Determine target IDs
+    ids: List[str] = []
+    if args.id:
+        ids = list(args.id)
+    elif args.path:
+        ids = resolve_ids(path=args.path)
+    else:
+        where = _filters_from_args(args)
+        ids = resolve_ids(where=where)
+
+    if not ids:
+        print(json.dumps({"action": "delete", "deleted": 0, "vectors": 0, "bm25": 0, "ids": []}, indent=2))
+        return 0
+
+    if args.dry_run:
+        print(json.dumps({"action": "delete", "dry_run": True, "would_delete": len(ids), "ids": ids}, ensure_ascii=False, indent=2))
+        return 0
+
+    vec_n, bm25_n = delete_by_ids(ids)
+    print(json.dumps({"action": "delete", "deleted": len(ids), "vectors": vec_n, "bm25": bm25_n, "ids": ids}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_reingest(args: argparse.Namespace) -> int:
+    targets: List[str] = []
+
+    if args.path:
+        # accept multiple --path
+        targets = [str(Path(p).expanduser().resolve()) for p in args.path]
+    elif args.id:
+        # map IDs -> source paths
+        ids = list(args.id)
+        show = show_entries_by_id(ids)
+        spaths = {str(e.metadata.get("source_path") or "") for e in show if e.metadata.get("source_path")}
+        targets = sorted(str(Path(p).expanduser().resolve()) for p in spaths if p)
+    else:
+        # resolve by filters -> source paths
+        where = _filters_from_args(args)
+        targets = list_source_paths(where=where)
+
+    if not targets:
+        print(json.dumps({"action": "reingest", "reingested": 0, "paths": []}, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.dry_run:
+        print(json.dumps({"action": "reingest", "dry_run": True, "would_reingest": len(targets), "paths": targets}, ensure_ascii=False, indent=2))
+        return 0
+
+    try:
+        res = reingest_paths(targets)
+    except Exception as e:
+        print(json.dumps({"action": "reingest", "error": str(e)}), file=sys.stderr)
+        return 1
+
+    print(json.dumps({"action": "reingest", "reingested": len(res), "results": res}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="classmate", description="CLASSMATE-RAG CLI")
     sub = p.add_subparsers(dest="command", required=True)
@@ -211,6 +350,53 @@ def build_parser() -> argparse.ArgumentParser:
     # stats
     ps = sub.add_parser("stats", help="Show index health and disk usage")
     ps.set_defaults(func=cmd_stats)
+
+    # list
+    pl = sub.add_parser("list", help="List indexed chunks by metadata filters")
+    pl.add_argument("--course", type=str, help="Filter by course")
+    pl.add_argument("--unit", type=str, help="Filter by unit")
+    pl.add_argument("--language", type=str, choices=["en", "it", "auto"], help="Filter by language")
+    pl.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "other"], help="Filter by doc type")
+    pl.add_argument("--author", type=str, help="Filter by author")
+    pl.add_argument("--semester", type=str, help="Filter by semester")
+    pl.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
+    pl.add_argument("--limit", type=int, default=50, help="Max items")
+    pl.add_argument("--offset", type=int, default=0, help="Offset for paging")
+    pl.set_defaults(func=cmd_list)
+
+    # show
+    pshow = sub.add_parser("show", help="Show detailed info for one or more chunk IDs, or all chunks of a path")
+    pshow.add_argument("--id", nargs="+", help="One or more chunk IDs")
+    pshow.add_argument("--path", type=str, help="Source file path")
+    pshow.set_defaults(func=cmd_show)
+
+    # delete
+    pdel = sub.add_parser("delete", help="Delete chunks from BOTH vector + BM25 indexes")
+    pdel.add_argument("--id", nargs="+", help="One or more chunk IDs to delete")
+    pdel.add_argument("--path", type=str, help="Delete all chunks for a given source file")
+    pdel.add_argument("--course", type=str, help="Filter by course")
+    pdel.add_argument("--unit", type=str, help="Filter by unit")
+    pdel.add_argument("--language", type=str, choices=["en", "it", "auto"], help="Filter by language")
+    pdel.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "other"], help="Filter by doc type")
+    pdel.add_argument("--author", type=str, help="Filter by author")
+    pdel.add_argument("--semester", type=str, help="Filter by semester")
+    pdel.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
+    pdel.add_argument("--dry-run", action="store_true", help="Preview what would be deleted")
+    pdel.set_defaults(func=cmd_delete)
+
+    # reingest
+    pre = sub.add_parser("reingest", help="Reingest by path(s), by id(s), or by filters (affects WHOLE files)")
+    pre.add_argument("--path", nargs="+", help="One or more file paths to reingest")
+    pre.add_argument("--id", nargs="+", help="One or more chunk IDs (their source file(s) will be reingested)")
+    pre.add_argument("--course", type=str, help="Filter by course")
+    pre.add_argument("--unit", type=str, help="Filter by unit")
+    pre.add_argument("--language", type=str, choices=["en", "it", "auto"], help="Filter by language")
+    pre.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "other"], help="Filter by doc type")
+    pre.add_argument("--author", type=str, help="Filter by author")
+    pre.add_argument("--semester", type=str, help="Filter by semester")
+    pre.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
+    pre.add_argument("--dry-run", action="store_true", help="Preview which files would be reingested")
+    pre.set_defaults(func=cmd_reingest)
 
     return p
 
