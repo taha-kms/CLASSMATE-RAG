@@ -23,8 +23,6 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import numpy as np
-
 from rag.config import load_config
 from rag.metadata import DocumentMetadata
 from rag.loaders import (
@@ -42,9 +40,10 @@ from rag.retrieval.expand import expand_with_neighbors
 from rag.generation import (
     LlamaCppRunner,
     build_grounded_messages,
-    build_general_messages, 
+    build_general_messages,
     format_context_blocks,
 )
+from rag.generation.prompting import choose_answer_language
 from rag.generation.post import enforce_citations
 
 @dataclass
@@ -467,10 +466,15 @@ def ask_question(
     # Step 21 ergonomics
     results = _apply_expansion_and_diversity(list(results))
 
-    # Language selection for answer
+    # Decide target language consistently with prompting
     forced_lang = None
     if filters.language and filters.language.value in ("en", "it"):
         forced_lang = filters.language.value
+    target_lang = choose_answer_language(
+        question=question,
+        forced_language=forced_lang,
+        default_language=str(cfg.default_language),
+    )
 
     messages = build_grounded_messages(
         question=question,
@@ -479,7 +483,6 @@ def ask_question(
         default_language=str(cfg.default_language),
         max_context_chars=3500,
     )
-    lang = "it" if (forced_lang == "it") else "en"
 
     _context_text, prov = format_context_blocks(results)
 
@@ -487,11 +490,11 @@ def ask_question(
     answer = runner.chat(messages).strip()
 
     # Fallback
-    if _looks_unknown(answer, lang):
-        fallback_msgs = build_general_messages(question=question, language=lang, style="concise")
+    if _looks_unknown(answer, target_lang):
+        fallback_msgs = build_general_messages(question=question, language=target_lang, style="concise")
         fallback = runner.chat(fallback_msgs).strip()
         if fallback:
-            note = " (General knowledge — no in-corpus source)" if lang == "en" else " (Conoscenza generale — nessuna fonte nel corpus)"
+            note = " (General knowledge — no in-corpus source)" if target_lang == "en" else " (Conoscenza generale — nessuna fonte nel corpus)"
             answer = fallback + note
 
     # Translate-on-miss
@@ -499,8 +502,8 @@ def ask_question(
         bool(getattr(cfg, "translate_on_miss", False)) or
         str(os.getenv("TRANSLATE_ON_MISS", "")).strip().lower() in {"1", "true", "yes"}
     )
-    if translate_flag and _needs_translation(answer, lang):
-        answer = _translate_text(answer, lang, runner=runner)
+    if translate_flag and _needs_translation(answer, target_lang):
+        answer = _translate_text(answer, target_lang, runner=runner)
 
     # Strict citations
     strict_flag = (
@@ -513,13 +516,13 @@ def ask_question(
             answer=answer,
             provenance=prov,
             add_sources_block=add_sources,
-            sources_title="Sources" if lang == "en" else "Fonti",
+            sources_title="Sources" if target_lang == "en" else "Fonti",
         )
 
     return AskResult(
         question=question,
         answer=answer,
-        language=lang,
+        language=target_lang,
         top_k=int(top_k),
         sources=prov,
         retrieved=results,
