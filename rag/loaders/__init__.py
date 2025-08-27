@@ -1,64 +1,170 @@
-from .pptx_loader import load_pptx_slides
-from .pdf_loader import load_pdf_pages
-from .docx_loader import load_docx_blocks
-from .text_loader import load_txt_text, load_md_text
-from .html_loader import load_html_text
-from .csv_loader import load_csv_text
+"""
+Unified loader interface.
 
+Public:
+    infer_doc_type_from_path(path) -> str
+    load_document_by_type(path, doc_type, enable_ocr=False) -> list[(page, text)]
+
+This module implements loaders for:
+    - txt, md
+    - html (readability)
+    - csv (bullets)
+    - epub
+    - pdf, docx, pptx (basic, dependency-backed)
+
+Notes
+- All loaders return a list of (page_number:int, text:str).
+- For multi-part formats (pptx slides, epub chapters), page numbers increase per part.
+"""
+
+from __future__ import annotations
+
+import os
 from pathlib import Path
+from typing import List, Tuple
+
+from .html_readable import load_html_readable
+from .csv_bullets import load_csv_bullets
+from .epub_loader import load_epub
+
+# Optional deps for document types
+try:
+    import pypdf  # type: ignore
+except Exception:  # pragma: no cover
+    pypdf = None  # type: ignore
+
+try:
+    import docx  # python-docx  # type: ignore
+except Exception:  # pragma: no cover
+    docx = None  # type: ignore
+
+try:
+    import pptx  # python-pptx  # type: ignore
+except Exception:  # pragma: no cover
+    pptx = None  # type: ignore
 
 
-__all__ = [
-    "load_pptx_slides",
-    "load_pdf_pages",
-    "load_docx_blocks",
-    "load_txt_text",
-    "load_md_text",
-    "load_html_text",
-    "load_csv_text",
-    "infer_doc_type_from_path",
-    "load_document_by_type",
-]
-
+# -----------------------
+# Type inference
+# -----------------------
 
 def infer_doc_type_from_path(path: str | Path) -> str:
-    ext = Path(path).suffix.lower()
-    if ext == ".pdf":
-        return "pdf"
-    if ext == ".docx":
-        return "docx"
-    if ext in (".pptx", ".ppt"):
-        return "pptx"
-    if ext in (".md", ".markdown"):
-        return "md"
-    if ext == ".txt":
-        return "txt"
-    if ext in (".html", ".htm"):
+    ext = Path(path).suffix.lower().lstrip(".")
+    if ext in {"htm", "html"}:
         return "html"
-    if ext == ".csv":
+    if ext == "csv":
         return "csv"
+    if ext == "epub":
+        return "epub"
+    if ext in {"md", "markdown"}:
+        return "md"
+    if ext in {"txt", "text"}:
+        return "txt"
+    if ext == "pdf":
+        return "pdf"
+    if ext in {"docx"}:
+        return "docx"
+    if ext in {"pptx", "ppt"}:
+        return "pptx"
     return "other"
 
 
-def load_document_by_type(path: str | Path, doc_type: str, *, enable_ocr: bool = False):
+# -----------------------
+# Primitive loaders
+# -----------------------
+
+def _load_txt(path: Path) -> List[Tuple[int, str]]:
+    txt = path.read_text(encoding="utf-8", errors="ignore")
+    txt = (txt or "").strip()
+    return [(1, txt)] if txt else []
+
+
+def _load_md(path: Path) -> List[Tuple[int, str]]:
+    # Keep markdown markup; later chunker/tokenizer deals with structure.
+    md = path.read_text(encoding="utf-8", errors="ignore")
+    md = (md or "").strip()
+    return [(1, md)] if md else []
+
+
+def _load_pdf(path: Path) -> List[Tuple[int, str]]:
+    if pypdf is None:
+        raise RuntimeError("pypdf is not installed; cannot load PDF")
+    reader = pypdf.PdfReader(str(path))  # type: ignore
+    pages: List[Tuple[int, str]] = []
+    for i, page in enumerate(reader.pages, start=1):  # type: ignore
+        try:
+            text = page.extract_text() or ""
+        except Exception:
+            text = ""
+        text = text.strip()
+        if text:
+            pages.append((i, text))
+    return pages
+
+
+def _load_docx(path: Path) -> List[Tuple[int, str]]:
+    if docx is None:
+        raise RuntimeError("python-docx is not installed; cannot load DOCX")
+    doc = docx.Document(str(path))  # type: ignore
+    paras = [p.text.strip() for p in doc.paragraphs]  # type: ignore
+    text = "\n".join([p for p in paras if p])
+    text = text.strip()
+    return [(1, text)] if text else []
+
+
+def _load_pptx(path: Path) -> List[Tuple[int, str]]:
+    if pptx is None:
+        raise RuntimeError("python-pptx is not installed; cannot load PPTX")
+    prs = pptx.Presentation(str(path))  # type: ignore
+    pages: List[Tuple[int, str]] = []
+    for i, slide in enumerate(prs.slides, start=1):  # type: ignore
+        chunks: List[str] = []
+        for shape in slide.shapes:  # type: ignore
+            try:
+                if hasattr(shape, "text"):
+                    t = (shape.text or "").strip()
+                    if t:
+                        chunks.append(t)
+            except Exception:
+                continue
+        txt = "\n".join(chunks).strip()
+        if txt:
+            pages.append((i, txt))
+    return pages
+
+
+# -----------------------
+# Unified entrypoint
+# -----------------------
+
+def load_document_by_type(
+    path: str | Path,
+    doc_type: str,
+    *,
+    enable_ocr: bool = False,  # kept for API compatibility; not used here
+) -> List[Tuple[int, str]]:
     """
-    Dispatch to the appropriate loader and return a list of (page_index, text) tuples.
-    'page_index' is 1-based when applicable; for formats without pages we return a single (1, text).
+    Route to the specific loader based on doc_type (string).
     """
-    dt = doc_type.lower()
-    if dt == "pdf":
-        return load_pdf_pages(path, enable_ocr=enable_ocr)
-    if dt == "docx":
-        return load_docx_blocks(path)
-    if dt == "pptx":
-        return load_pptx_slides(path)
-    if dt == "md":
-        return [(1, load_md_text(path))]
-    if dt == "txt":
-        return [(1, load_txt_text(path))]
-    if dt == "html":
-        return [(1, load_html_text(path))]
-    if dt == "csv":
-        return [(1, load_csv_text(path))]
-    # Fallback: treat as plain text
-    return [(1, load_txt_text(path))]
+    p = Path(path).expanduser().resolve()
+    t = (doc_type or infer_doc_type_from_path(p)).lower()
+
+    if t == "txt":
+        return _load_txt(p)
+    if t == "md":
+        return _load_md(p)
+    if t == "html":
+        return load_html_readable(p)
+    if t == "csv":
+        return load_csv_bullets(p)
+    if t == "epub":
+        return load_epub(p)
+    if t == "pdf":
+        return _load_pdf(p)
+    if t == "docx":
+        return _load_docx(p)
+    if t == "pptx":
+        return _load_pptx(p)
+
+    # Fallback: try plain text
+    return _load_txt(p)

@@ -193,13 +193,14 @@ def cmd_stats(_args: argparse.Namespace) -> int:
     return 0
 
 
-# ---------- Step 15/16: ingestion management + validation ----------
+# ---------- Ingestion management + validation ----------
 
 def _filters_from_args(args: argparse.Namespace) -> dict:
     return _validated_meta_from_args(args=args).to_dict()
 
 
 def cmd_list(args: argparse.Namespace) -> int:
+    from rag.admin.manage import list_entries
     where = _filters_from_args(args)
     entries = list_entries(where=where, limit=args.limit, offset=args.offset)
     out = {
@@ -227,6 +228,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_show(args: argparse.Namespace) -> int:
+    from rag.admin.manage import show_entries_by_id, resolve_ids
     if not args.id and not args.path:
         print("ERROR: show requires --id or --path", file=sys.stderr)
         return 2
@@ -253,6 +255,7 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 
 def cmd_delete(args: argparse.Namespace) -> int:
+    from rag.admin.manage import resolve_ids, delete_by_ids
     # Determine target IDs
     ids: List[str] = []
     if args.id:
@@ -277,6 +280,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
 
 
 def cmd_reingest(args: argparse.Namespace) -> int:
+    from rag.admin.manage import show_entries_by_id, list_source_paths, reingest_paths
     targets: List[str] = []
 
     if args.path:
@@ -321,7 +325,7 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--course", type=str, help="Course code or name")
     pa.add_argument("--unit", type=str, help="Unit/module name")
     pa.add_argument("--language", type=str, choices=["en", "it", "auto"], default="auto", help="Language of the document (or auto)")
-    pa.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "other"], help="Document type (inferred by default)")
+    pa.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Document type (inferred by default)")
     pa.add_argument("--author", type=str, help="Author or source")
     pa.add_argument("--semester", type=str, help="Semester label (e.g., 2025S)")
     pa.add_argument("--tags", type=str, help="Comma-separated tags (e.g., exam,week1,lab)")
@@ -334,7 +338,7 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--course", type=str, help="Filter by course")
     pq.add_argument("--unit", type=str, help="Filter by unit/module")
     pq.add_argument("--language", type=str, choices=["en", "it", "auto"], default="auto", help="Answer/query language (auto=match question)")
-    pq.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "other"], help="Filter by document type")
+    pq.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Filter by document type")
     pq.add_argument("--author", type=str, help="Filter by author/source")
     pq.add_argument("--semester", type=str, help="Filter by semester")
     pq.add_argument("--tags", type=str, help="Filter by comma-separated tags")
@@ -349,7 +353,7 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--course", type=str, help="Filter by course")
     pp.add_argument("--unit", type=str, help="Filter by unit/module")
     pp.add_argument("--language", type=str, choices=["en", "it", "auto"], default="auto", help="Query/answer language (affects nothing here, just filter)")
-    pp.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "other"], help="Filter by document type")
+    pp.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Filter by document type")
     pp.add_argument("--author", type=str, help="Filter by author/source")
     pp.add_argument("--semester", type=str, help="Filter by semester")
     pp.add_argument("--tags", type=str, help="Filter by comma-separated tags")
@@ -367,7 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--course", type=str, help="Filter by course")
     pl.add_argument("--unit", type=str, help="Filter by unit")
     pl.add_argument("--language", type=str, choices=["en", "it", "auto"], help="Filter by language")
-    pl.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "other"], help="Filter by doc type")
+    pl.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Filter by doc type")
     pl.add_argument("--author", type=str, help="Filter by author")
     pl.add_argument("--semester", type=str, help="Filter by semester")
     pl.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
@@ -389,7 +393,7 @@ def build_parser() -> argparse.ArgumentParser:
     pdel.add_argument("--course", type=str, help="Filter by course")
     pdel.add_argument("--unit", type=str, help="Filter by unit")
     pdel.add_argument("--language", type=str, choices=["en", "it", "auto"], help="Filter by language")
-    pdel.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "other"], help="Filter by doc type")
+    pdel.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Filter by doc type")
     pdel.add_argument("--author", type=str, help="Filter by author")
     pdel.add_argument("--semester", type=str, help="Filter by semester")
     pdel.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
@@ -404,7 +408,7 @@ def build_parser() -> argparse.ArgumentParser:
     pre.add_argument("--course", type=str, help="Filter by course")
     pre.add_argument("--unit", type=str, help="Filter by unit")
     pre.add_argument("--language", type=str, choices=["en", "it", "auto"], help="Filter by language")
-    pre.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "other"], help="Filter by doc type")
+    pre.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Filter by doc type")
     pre.add_argument("--author", type=str, help="Filter by author")
     pre.add_argument("--semester", type=str, help="Filter by semester")
     pre.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
