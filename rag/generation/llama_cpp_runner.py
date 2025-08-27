@@ -8,6 +8,11 @@ Llama 3.1-8B runner using llama-cpp-python.
 Notes:
 - Defaults are conservative for CPU+low-VRAM laptops. Adjust n_gpu_layers to offload more layers to GPU if available.
 - Streaming is not implemented here; we return the full completion for simplicity in the CLI.
+
+Step 19 additions:
+- Read optional env/config knobs:
+    * LLAMA_N_GPU_LAYERS (int)   -> offload to GPU if supported
+    * LLAMA_N_THREADS (int)      -> override CPU threads
 """
 
 from __future__ import annotations
@@ -57,13 +62,16 @@ class LlamaCppRunner:
         path = self._resolve_model_path()
         self._loaded_path = path
 
-        n_threads = self.n_threads or os.cpu_count() or 4
+        env_threads = os.getenv("LLAMA_N_THREADS")
+        env_gpu = os.getenv("LLAMA_N_GPU_LAYERS")
+        n_threads = int(env_threads) if (env_threads and env_threads.isdigit()) else (self.n_threads or os.cpu_count() or 4)
+        n_gpu_layers = int(env_gpu) if (env_gpu and env_gpu.strip("-").isdigit()) else self.n_gpu_layers
 
         self._llm = Llama(
             model_path=str(path),
             n_ctx=self.n_ctx,
             n_threads=n_threads,
-            n_gpu_layers=self.n_gpu_layers,
+            n_gpu_layers=n_gpu_layers,
             seed=self.seed,
             logits_all=False,
             vocab_only=False,

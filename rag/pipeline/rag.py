@@ -2,9 +2,12 @@
 End-to-end RAG pipeline used by the CLI.
 
 - ingest_file(): loads a document, chunks it, (optionally) detects language per chunk,
-  embeds with e5, and upserts into Chroma (vector) and BM25 (lexical) stores.
+  embeds with e5 (now with optional disk cache), and upserts into Chroma (vector) and BM25 (lexical) stores.
 - ask_question(): runs filtered hybrid retrieval, builds grounded messages,
   and generates an answer with Llama 3.1 (llama.cpp), returning answer + provenance.
+
+Step 18: strict citation post-processing
+Step 19: embedding cache, concurrent chunking, and near-duplicate filtering
 """
 
 from __future__ import annotations
@@ -15,6 +18,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import numpy as np
 
 from rag.config import load_config
@@ -23,9 +28,11 @@ from rag.loaders import (
     infer_doc_type_from_path,
     load_document_by_type,
 )
-from rag.chunking import chunk_pages
+from rag.chunking import chunk_text
 from rag.utils import detect_lang_tag, stable_chunk_id
+from rag.utils.dedup import dedup_text_blocks
 from rag.embeddings import E5MultilingualEmbedder
+from rag.embeddings.cache import CachingEmbedder
 from rag.retrieval import ChromaVectorStore, BM25Store
 from rag.retrieval.fusion import HybridRetriever
 from rag.generation import (
@@ -129,13 +136,51 @@ def _sanitize_metadata(meta: Dict[str, object]) -> Dict[str, object]:
 # Ingest
 # -----------------------------
 
+def _concurrent_chunk_pages(
+    pages: Sequence[Tuple[int, str]],
+    *,
+    chunk_size: int,
+    chunk_overlap: int,
+    max_workers: int,
+) -> List[Tuple[int, int, str]]:
+    """
+    Concurrent page-wise chunking using a bounded thread pool.
+    Returns a flattened list of (page, chunk_id, text) with global monotonic chunk_id to preserve determinism.
+    """
+    # First, chunk each page independently
+    results: Dict[int, List[str]] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        fut2page = {
+            ex.submit(chunk_text, text, chunk_size=chunk_size, chunk_overlap=chunk_overlap, page=page, starting_chunk_id=0): page
+            for (page, text) in pages
+        }
+        for fut in as_completed(fut2page):
+            page = fut2page[fut]
+            try:
+                chs = fut.result()
+            except Exception:
+                chs = []
+            # only store text blocks; we will reassign global chunk ids later
+            results[page] = [c.text for c in chs if (c.text or "").strip()]
+
+    # Flatten in page order and assign global chunk_id (stable)
+    out: List[Tuple[int, int, str]] = []
+    next_cid = 0
+    for page, blocks in sorted(results.items(), key=lambda kv: kv[0]):
+        for text in blocks:
+            out.append((page, next_cid, text))
+            next_cid += 1
+    return out
+
+
 def ingest_file(
     *,
     path: str | Path,
     doc_meta: DocumentMetadata,
 ) -> IngestResult:
     """
-    Load a document, chunk it, embed, and upsert into vector + BM25 stores.
+    Load a document, chunk it (concurrently), optionally deduplicate, embed (with cache),
+    and upsert into vector + BM25 stores.
     """
     cfg = load_config()
     p = Path(path).resolve()
@@ -148,13 +193,33 @@ def ingest_file(
     pages = load_document_by_type(p, doc_type, enable_ocr=bool(cfg.enable_ocr))
     total_pages = len(pages)
 
-    # Chunk
-    chunks = chunk_pages(
+    # Concurrent chunking
+    max_workers_env = os.getenv("INGEST_THREADS")
+    max_workers = int(max_workers_env) if (max_workers_env and max_workers_env.isdigit()) else max(2, (os.cpu_count() or 4) // 2)
+    chunks = _concurrent_chunk_pages(
         pages,
         chunk_size=int(cfg.chunk_size),
         chunk_overlap=int(cfg.chunk_overlap),
-        starting_chunk_id=0,
+        max_workers=max_workers,
     )
+
+    # Optional near-duplicate filtering (env toggle)
+    dedup_on = str(os.getenv("DEDUP_CHUNKS", "")).strip().lower() in {"1", "true", "yes"}
+    dedup_thr = float(os.getenv("DEDUP_THRESHOLD", "0.92"))
+    if dedup_on and chunks:
+        # We must preserve determinism of IDs. Since we remove some chunks, IDs of subsequent chunks will shift.
+        # This is acceptable under the dedup mode (documented behavior).
+        blocks = [t for (_pg, _cid, t) in chunks]
+        kept_blocks = dedup_text_blocks(blocks, jaccard_threshold=dedup_thr)
+        # Rebuild chunks with only kept blocks, reassigning chunk_id sequentially
+        chunks = []
+        cid = 0
+        # Map back by textual equality (stable order)
+        for page, _old_cid, text in _concurrent_chunk_pages(pages, chunk_size=int(cfg.chunk_size), chunk_overlap=int(cfg.chunk_overlap), max_workers=1):
+            if text in kept_blocks:
+                chunks.append((page, cid, text))
+                kept_blocks.remove(text)  # consume the first occurrence
+                cid += 1
 
     created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -164,7 +229,8 @@ def ingest_file(
     metas: List[Dict[str, object]] = []
 
     # Components
-    embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
+    base_embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
+    embedder = CachingEmbedder(base_embedder, cache_dir=os.getenv("EMB_CACHE_DIR") or "./indexes/emb_cache")
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create("./indexes/bm25")
 
@@ -217,7 +283,7 @@ def ingest_file(
             created_at=created_at,
         )
 
-    # Embed & upsert
+    # Embed (cached) & upsert
     emb = embedder.encode_passages(texts)
     vec_store.upsert(ids=ids, documents=texts, metadatas=metas, embeddings=emb)
 
@@ -235,8 +301,6 @@ def ingest_file(
 
 
 
-# ... AskResult dataclass unchanged ...
-
 def _looks_unknown(ans: str, lang: str) -> bool:
     a = (ans or "").strip().lower()
     if not a:
@@ -244,8 +308,6 @@ def _looks_unknown(ans: str, lang: str) -> bool:
     if lang == "it":
         return ("non lo so" in a) or ("non so" in a)
     return ("i don't know" in a) or ("i dont know" in a)
-
-
 
 
 # -----------------------------
@@ -263,12 +325,13 @@ def ask_question(
 
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create("./indexes/bm25")
-    embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
+    base_embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
+    embedder = CachingEmbedder(base_embedder, cache_dir=os.getenv("EMB_CACHE_DIR") or "./indexes/emb_cache")
 
     retriever = HybridRetriever(
         vector_store=vec_store,
         bm25_store=bm25_store,
-        embedder=embedder,
+        embedder=embedder,   # cached embeddings for queries too
         k_vector=int(cfg.k_vector),
         k_bm25=int(cfg.k_bm25),
         rrf_k=60,
