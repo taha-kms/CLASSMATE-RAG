@@ -18,7 +18,6 @@ Notes:
 from __future__ import annotations
 
 # --- LOAD .env EARLY (so HF cache vars take effect before imports) ---
-import os
 from pathlib import Path
 
 try:
@@ -200,7 +199,6 @@ def _filters_from_args(args: argparse.Namespace) -> dict:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    from rag.admin.manage import list_entries
     where = _filters_from_args(args)
     entries = list_entries(where=where, limit=args.limit, offset=args.offset)
     out = {
@@ -228,7 +226,6 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_show(args: argparse.Namespace) -> int:
-    from rag.admin.manage import show_entries_by_id, resolve_ids
     if not args.id and not args.path:
         print("ERROR: show requires --id or --path", file=sys.stderr)
         return 2
@@ -255,7 +252,6 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 
 def cmd_delete(args: argparse.Namespace) -> int:
-    from rag.admin.manage import resolve_ids, delete_by_ids
     # Determine target IDs
     ids: List[str] = []
     if args.id:
@@ -280,7 +276,6 @@ def cmd_delete(args: argparse.Namespace) -> int:
 
 
 def cmd_reingest(args: argparse.Namespace) -> int:
-    from rag.admin.manage import show_entries_by_id, list_source_paths, reingest_paths
     targets: List[str] = []
 
     if args.path:

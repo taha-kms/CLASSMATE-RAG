@@ -3,12 +3,14 @@ End-to-end RAG pipeline used by the CLI.
 
 - ingest_file(): loads a document, chunks it (concurrently), optionally deduplicates,
   embeds with e5 (with optional disk cache), and upserts into Chroma (vector) and BM25 (lexical) stores.
-- ask_question(): runs filtered hybrid retrieval, builds grounded messages,
-  and generates an answer with Llama 3.1 (llama.cpp), returning answer + provenance.
+- retrieve_preview(): retrieval-only pipeline for debugging/preview (applies expansion & diversity)
+- ask_question(): retrieval + prompt build + generation (+ translate-on-miss, strict citations)
+- index_stats(): quick health snapshot
 
 Step 18: strict citation post-processing
 Step 19: embedding cache, concurrent chunking, and near-duplicate filtering
 Step 20: multilingual robustness (translate-on-miss preserving [n])
+Step 21: retrieval ergonomics (neighbor expansion + doc-level diversity)
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from rag.embeddings import E5MultilingualEmbedder
 from rag.embeddings.cache import CachingEmbedder
 from rag.retrieval import ChromaVectorStore, BM25Store
 from rag.retrieval.fusion import HybridRetriever
+from rag.retrieval.expand import expand_with_neighbors
 from rag.generation import (
     LlamaCppRunner,
     build_grounded_messages,
@@ -298,6 +301,95 @@ def ingest_file(
     )
 
 
+# -----------------------------
+# Preview & Ask utilities
+# -----------------------------
+
+def _apply_expansion_and_diversity(
+    results: List[Dict[str, object]],
+) -> List[Dict[str, object]]:
+    cfg = load_config()
+    enable_expand = str(os.getenv("ENABLE_NEIGHBOR_EXPANSION", "true")).strip().lower() in {"1", "true", "yes"}
+    radius = int(os.getenv("NEIGHBOR_RADIUS", "1"))
+    cap = int(os.getenv("DOC_DIVERSITY_CAP", "3"))
+
+    # If config object defines overrides, prefer them
+    radius = int(getattr(cfg, "neighbor_radius", radius))
+    cap = int(getattr(cfg, "doc_diversity_cap", cap))
+    if hasattr(cfg, "enable_neighbor_expansion"):
+        enable_expand = bool(getattr(cfg, "enable_neighbor_expansion"))
+
+    out = results
+    if enable_expand and radius > 0:
+        out = expand_with_neighbors(out, radius=radius, max_per_doc=cap)
+    else:
+        # Still enforce doc diversity without adding neighbors
+        out = expand_with_neighbors(out, radius=0, max_per_doc=cap)
+    return out
+
+
+def retrieve_preview(
+    *,
+    question: str,
+    filters: Dict[str, object],
+    top_k: int = 8,
+    hybrid: bool = True,
+) -> List[Dict[str, object]]:
+    """
+    Retrieval-only preview with ergonomics applied.
+    Returns a list of dicts: {n, id, score, prov, metadata, document}
+    """
+    cfg = load_config()
+    vec_store = ChromaVectorStore.from_config()
+    bm25_store = BM25Store.load_or_create("./indexes/bm25")
+    base_embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
+    embedder = CachingEmbedder(base_embedder, cache_dir=os.getenv("EMB_CACHE_DIR") or "./indexes/emb_cache")
+
+    retriever = HybridRetriever(
+        vector_store=vec_store,
+        bm25_store=bm25_store,
+        embedder=embedder,
+        k_vector=int(cfg.k_vector),
+        k_bm25=int(cfg.k_bm25),
+        rrf_k=60,
+        weight_vector=1.0,
+        weight_bm25=1.0,
+    )
+
+    raw = retriever.retrieve(
+        question=question,
+        filters=filters,
+        top_k=int(top_k),
+        hybrid=bool(hybrid),
+    )
+
+    # Ergonomics
+    items = _apply_expansion_and_diversity(list(raw))
+
+    # Attach provenance string for preview readability
+    def _fmt_prov(meta: Dict[str, object]) -> str:
+        sp = meta.get("source_path")
+        pg = meta.get("page")
+        ck = meta.get("chunk_id")
+        return f"{sp}#p{pg}:c{ck}"
+
+    out: List[Dict[str, object]] = []
+    for i, r in enumerate(items, start=1):
+        meta = dict(r.get("metadata") or {})
+        out.append({
+            "n": i,
+            "id": r.get("id"),
+            "score": r.get("score"),
+            "prov": _fmt_prov(meta),
+            "metadata": meta,
+            "document": r.get("document"),
+        })
+    return out
+
+
+# -----------------------------
+# Ask
+# -----------------------------
 
 def _looks_unknown(ans: str, lang: str) -> bool:
     a = (ans or "").strip().lower()
@@ -309,9 +401,6 @@ def _looks_unknown(ans: str, lang: str) -> bool:
 
 
 def _needs_translation(answer: str, target_lang: str) -> bool:
-    """
-    Heuristic: translate when the detected language is different from target_lang.
-    """
     if not answer.strip():
         return False
     det = detect_lang_tag(answer)
@@ -319,10 +408,6 @@ def _needs_translation(answer: str, target_lang: str) -> bool:
 
 
 def _translate_text(text: str, target_lang: str, runner: Optional[LlamaCppRunner] = None) -> str:
-    """
-    Translate text to target_lang ('en' or 'it') using the local Llama runner.
-    Preserve bracketed citations like [1], [2]; do not add or remove citations.
-    """
     if not text.strip():
         return text
     if runner is None:
@@ -331,15 +416,13 @@ def _translate_text(text: str, target_lang: str, runner: Optional[LlamaCppRunner
     if target_lang == "it":
         sys = (
             "Sei un traduttore. Traduci fedelmente in italiano il seguente testo.\n"
-            "Mantieni *esattamente* i riferimenti tra parentesi quadre come [1], [2], ecc.\n"
-            "Non aggiungere né rimuovere citazioni o contenuti; restituisci solo il testo tradotto."
+            "Mantieni esattamente i riferimenti tra parentesi quadre come [1], [2]."
         )
         prompt = f"Testo da tradurre:\n{text}"
     else:
         sys = (
             "You are a translator. Translate the following text faithfully into English.\n"
-            "Preserve bracketed citations like [1], [2], etc. exactly.\n"
-            "Do not add or remove citations or content; return only the translated text."
+            "Preserve bracketed citations like [1], [2] exactly."
         )
         prompt = f"Text to translate:\n{text}"
 
@@ -347,10 +430,6 @@ def _translate_text(text: str, target_lang: str, runner: Optional[LlamaCppRunner
     out = runner.chat(msgs, temperature=0.0, top_p=1.0, repeat_penalty=1.0, max_tokens=2048)
     return out.strip() or text
 
-
-# -----------------------------
-# Ask
-# -----------------------------
 
 def ask_question(
     *,
@@ -369,7 +448,7 @@ def ask_question(
     retriever = HybridRetriever(
         vector_store=vec_store,
         bm25_store=bm25_store,
-        embedder=embedder,   # cached embeddings for queries too
+        embedder=embedder,
         k_vector=int(cfg.k_vector),
         k_bm25=int(cfg.k_bm25),
         rrf_k=60,
@@ -385,6 +464,10 @@ def ask_question(
         hybrid=bool(hybrid),
     )
 
+    # Step 21 ergonomics
+    results = _apply_expansion_and_diversity(list(results))
+
+    # Language selection for answer
     forced_lang = None
     if filters.language and filters.language.value in ("en", "it"):
         forced_lang = filters.language.value
@@ -396,15 +479,14 @@ def ask_question(
         default_language=str(cfg.default_language),
         max_context_chars=3500,
     )
-    # language we asked for
     lang = "it" if (forced_lang == "it") else "en"
 
-    context_text, prov = format_context_blocks(results)
+    _context_text, prov = format_context_blocks(results)
 
     runner = LlamaCppRunner()
     answer = runner.chat(messages).strip()
 
-    # Fallback: if model says it doesn't know (or empty), provide a short general definition without citations
+    # Fallback
     if _looks_unknown(answer, lang):
         fallback_msgs = build_general_messages(question=question, language=lang, style="concise")
         fallback = runner.chat(fallback_msgs).strip()
@@ -412,7 +494,7 @@ def ask_question(
             note = " (General knowledge — no in-corpus source)" if lang == "en" else " (Conoscenza generale — nessuna fonte nel corpus)"
             answer = fallback + note
 
-    # --- Step 20: optional translate-on-miss (wrong language) ---
+    # Translate-on-miss
     translate_flag = (
         bool(getattr(cfg, "translate_on_miss", False)) or
         str(os.getenv("TRANSLATE_ON_MISS", "")).strip().lower() in {"1", "true", "yes"}
@@ -420,13 +502,12 @@ def ask_question(
     if translate_flag and _needs_translation(answer, lang):
         answer = _translate_text(answer, lang, runner=runner)
 
-    # --- Step 18: citation integrity (STRICT_CITATIONS) ---
+    # Strict citations
     strict_flag = (
         bool(getattr(cfg, "strict_citations", False)) or
         str(os.getenv("STRICT_CITATIONS", "")).strip().lower() in {"1", "true", "yes"}
     )
     if strict_flag:
-        # Optionally append a "Sources" block if configured via env
         add_sources = str(os.getenv("APPEND_SOURCES_BLOCK", "")).strip().lower() in {"1", "true", "yes"}
         answer = enforce_citations(
             answer=answer,
@@ -445,3 +526,47 @@ def ask_question(
         filters_applied=where,
         hybrid=bool(hybrid),
     )
+
+
+# -----------------------------
+# Stats
+# -----------------------------
+
+def index_stats() -> Dict[str, object]:
+    """
+    Return index health snapshot: counts and rough disk usage.
+    """
+    vec = ChromaVectorStore.from_config()
+    bm = BM25Store.load_or_create("./indexes/bm25")
+
+    try:
+        vcount = int(vec.count())
+    except Exception:
+        vcount = -1
+
+    try:
+        bcount = int(bm.count())
+    except Exception:
+        bcount = -1
+
+    # Disk usage (best-effort)
+    def _du(path: Path) -> int:
+        if not path.exists():
+            return 0
+        if path.is_file():
+            return path.stat().st_size
+        total = 0
+        for p in path.rglob("*"):
+            try:
+                if p.is_file():
+                    total += p.stat().st_size
+            except Exception:
+                continue
+        return total
+
+    usage = {
+        "chroma_bytes": _du(Path("./indexes/chroma")),
+        "bm25_bytes": _du(Path("./indexes/bm25")),
+        "emb_cache_bytes": _du(Path("./indexes/emb_cache")),
+    }
+    return {"vectors": vcount, "bm25": bcount, **usage}
