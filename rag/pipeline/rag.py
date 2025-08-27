@@ -1,13 +1,14 @@
 """
 End-to-end RAG pipeline used by the CLI.
 
-- ingest_file(): loads a document, chunks it, (optionally) detects language per chunk,
-  embeds with e5 (now with optional disk cache), and upserts into Chroma (vector) and BM25 (lexical) stores.
+- ingest_file(): loads a document, chunks it (concurrently), optionally deduplicates,
+  embeds with e5 (with optional disk cache), and upserts into Chroma (vector) and BM25 (lexical) stores.
 - ask_question(): runs filtered hybrid retrieval, builds grounded messages,
   and generates an answer with Llama 3.1 (llama.cpp), returning answer + provenance.
 
 Step 18: strict citation post-processing
 Step 19: embedding cache, concurrent chunking, and near-duplicate filtering
+Step 20: multilingual robustness (translate-on-miss preserving [n])
 """
 
 from __future__ import annotations
@@ -207,18 +208,15 @@ def ingest_file(
     dedup_on = str(os.getenv("DEDUP_CHUNKS", "")).strip().lower() in {"1", "true", "yes"}
     dedup_thr = float(os.getenv("DEDUP_THRESHOLD", "0.92"))
     if dedup_on and chunks:
-        # We must preserve determinism of IDs. Since we remove some chunks, IDs of subsequent chunks will shift.
-        # This is acceptable under the dedup mode (documented behavior).
         blocks = [t for (_pg, _cid, t) in chunks]
         kept_blocks = dedup_text_blocks(blocks, jaccard_threshold=dedup_thr)
         # Rebuild chunks with only kept blocks, reassigning chunk_id sequentially
         chunks = []
         cid = 0
-        # Map back by textual equality (stable order)
         for page, _old_cid, text in _concurrent_chunk_pages(pages, chunk_size=int(cfg.chunk_size), chunk_overlap=int(cfg.chunk_overlap), max_workers=1):
             if text in kept_blocks:
                 chunks.append((page, cid, text))
-                kept_blocks.remove(text)  # consume the first occurrence
+                kept_blocks.remove(text)
                 cid += 1
 
     created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -310,6 +308,46 @@ def _looks_unknown(ans: str, lang: str) -> bool:
     return ("i don't know" in a) or ("i dont know" in a)
 
 
+def _needs_translation(answer: str, target_lang: str) -> bool:
+    """
+    Heuristic: translate when the detected language is different from target_lang.
+    """
+    if not answer.strip():
+        return False
+    det = detect_lang_tag(answer)
+    return det in {"en", "it"} and det != target_lang
+
+
+def _translate_text(text: str, target_lang: str, runner: Optional[LlamaCppRunner] = None) -> str:
+    """
+    Translate text to target_lang ('en' or 'it') using the local Llama runner.
+    Preserve bracketed citations like [1], [2]; do not add or remove citations.
+    """
+    if not text.strip():
+        return text
+    if runner is None:
+        runner = LlamaCppRunner()
+
+    if target_lang == "it":
+        sys = (
+            "Sei un traduttore. Traduci fedelmente in italiano il seguente testo.\n"
+            "Mantieni *esattamente* i riferimenti tra parentesi quadre come [1], [2], ecc.\n"
+            "Non aggiungere né rimuovere citazioni o contenuti; restituisci solo il testo tradotto."
+        )
+        prompt = f"Testo da tradurre:\n{text}"
+    else:
+        sys = (
+            "You are a translator. Translate the following text faithfully into English.\n"
+            "Preserve bracketed citations like [1], [2], etc. exactly.\n"
+            "Do not add or remove citations or content; return only the translated text."
+        )
+        prompt = f"Text to translate:\n{text}"
+
+    msgs = [{"role": "system", "content": sys}, {"role": "user", "content": prompt}]
+    out = runner.chat(msgs, temperature=0.0, top_p=1.0, repeat_penalty=1.0, max_tokens=2048)
+    return out.strip() or text
+
+
 # -----------------------------
 # Ask
 # -----------------------------
@@ -373,6 +411,14 @@ def ask_question(
         if fallback:
             note = " (General knowledge — no in-corpus source)" if lang == "en" else " (Conoscenza generale — nessuna fonte nel corpus)"
             answer = fallback + note
+
+    # --- Step 20: optional translate-on-miss (wrong language) ---
+    translate_flag = (
+        bool(getattr(cfg, "translate_on_miss", False)) or
+        str(os.getenv("TRANSLATE_ON_MISS", "")).strip().lower() in {"1", "true", "yes"}
+    )
+    if translate_flag and _needs_translation(answer, lang):
+        answer = _translate_text(answer, lang, runner=runner)
 
     # --- Step 18: citation integrity (STRICT_CITATIONS) ---
     strict_flag = (

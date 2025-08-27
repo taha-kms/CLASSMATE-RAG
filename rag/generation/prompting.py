@@ -81,15 +81,18 @@ def build_grounded_messages(
     context_text, _prov = format_context_blocks(contexts, max_total_chars=max_context_chars)
 
     now = datetime.utcnow().strftime("%Y-%m-%d")
+    # Multilingual note added: sources may be EN or IT; always answer in target language.
     system_en = (
         "You are CLASSMATE-RAG, a helpful study assistant.\n"
         "Use the provided context blocks to answer and cite them inline as [n].\n"
-        "If the answer is not in the context, reply: \"I don't know.\""
+        "If the answer is not in the context, reply: \"I don't know.\"\n"
+        "Sources may be in English or Italian; translate or summarize as needed, but reply entirely in the requested language."
     )
     system_it = (
         "Sei CLASSMATE-RAG, un assistente allo studio.\n"
         "Usa i blocchi di contesto forniti per rispondere e cita nel testo come [n].\n"
-        "Se la risposta non è nel contesto, rispondi: \"Non lo so.\""
+        "Se la risposta non è nel contesto, rispondi: \"Non lo so.\"\n"
+        "Le fonti possono essere in inglese o in italiano; traduci o riassumi se serve, ma rispondi interamente nella lingua richiesta."
     )
     system_msg = system_it if lang == "it" else system_en
 
@@ -127,15 +130,18 @@ def build_general_messages(
     if language not in {"en", "it"}:
         language = "en"
 
+    # Multilingual note added, mirroring grounded prompt.
     system_en = (
         "You are a helpful study assistant.\n"
         "Provide a short, clear definition or explanation from general knowledge.\n"
-        "Do NOT invent citations. Do NOT use [n]."
+        "Do NOT invent citations. Do NOT use [n].\n"
+        "Reply entirely in English."
     )
     system_it = (
         "Sei un assistente allo studio.\n"
         "Fornisci una breve definizione o spiegazione basata su conoscenze generali.\n"
-        "Non inventare citazioni. Non usare [n]."
+        "Non inventare citazioni. Non usare [n].\n"
+        "Rispondi interamente in italiano."
     )
     user_en = f"Question: {question}\nAnswer in English. Keep it {style} (2–4 sentences)."
     user_it = f"Domanda: {question}\nRispondi in italiano. Mantieni uno stile {style} (2–4 frasi)."
