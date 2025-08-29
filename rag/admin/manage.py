@@ -173,8 +173,6 @@ def resolve_ids(
     """
     cat = _read_bm25_catalog()
     if ids:
-        have = set(i for i in cat)
-        # quick map
         index = {e.id: e for e in cat}
         return [i for i in ids if i in index]
 
