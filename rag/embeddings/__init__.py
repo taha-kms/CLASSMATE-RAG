@@ -89,3 +89,7 @@ class E5MultilingualEmbedder:
             batch_size=32,
         )
         return vecs.astype("float32", copy=False)
+
+
+
+__all__ = ["E5MultilingualEmbedder"]
