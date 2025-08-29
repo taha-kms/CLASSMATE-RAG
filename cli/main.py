@@ -1,42 +1,104 @@
 """
-CLASSMATE-RAG CLI
+CLASSMATE-RAG CLI (Commented Edition)
 
-Commands:
+This module exposes a command-line interface to the CLASSMATE-RAG system.
+It wires together ingestion, retrieval, admin utilities, backup/restore,
+and index maintenance.
+
+High-level overview of commands:
+
+  Ingestion / Query
+  -----------------
   - add <path> [metadata flags]
+      Ingest a document (PDF/DOCX/PPTX/CSV/EPUB/HTML/TXT/MD) into BOTH:
+        * BM25 index (lexical, JSONL on disk)
+        * Chroma vector store (semantic embeddings)
+      Metadata is validated/normalized before ingestion.
+
   - ask "<question>" [filter flags]
-  - preview "<question>" [filter flags]   -> retrieval-only, shows contexts/scores
-  - stats                                  -> index health (counts + disk usage)
+      Runs hybrid retrieval (vector + BM25) and LLM generation.
+      Returns answer, language, top_k, sources, and filters used.
+
+  - preview "<question>" [filter flags]
+      Retrieval-only (no generation). Shows ranked contexts/snippets/scores.
+
+  Observability / Maintenance
+  ---------------------------
+  - stats
+      Shows index health: vector_count and disk usage for Chroma/BM25.
+
+  Backup / Migration
+  ------------------
   - dump --path dumps/corpus.jsonl [--no-emb]
+      Exports the whole catalog (one JSON per chunk). Optionally includes
+      an embedding checksum so integrity can be validated later.
+
   - restore --path dumps/corpus.jsonl
+      Recreates BM25 + Chroma from a previous dump.
+
   - vacuum
+      Housekeeping (compact/persist indexes where supported).
+
   - rebuild --model intfloat/multilingual-e5-base
-  - list [filter flags] [--limit N --offset M]
+      Re-embed all texts with a new embedding model and refresh vector store.
+
+  Curation / Diagnosis
+  --------------------
+  - list [filters] [--limit N --offset M]
+      Lists chunk records (id, source_path, page, chunk_id, metadata summary).
+
   - show (--id ID ... | --path PATH)
-  - delete [--id ID ... | --path PATH | filter flags] [--dry-run]
-  - reingest (--path PATH ... | --id ID ... | filter flags)
+      Show one or more chunks’ metadata + a small content snippet.
+
+  - delete [--id ID ... | --path PATH | filters] [--dry-run]
+      Delete chunks from BOTH vector + BM25 stores. Dry-run prints what
+      would be removed without touching data.
+
+  - reingest (--path PATH ... | --id ID ... | filters)
+      Re-process entire source files. Metadata is **inferred from existing
+      catalog entries** for those files (first non-empty value; tags are union).
+      Use this when you want to rebuild files with the same metadata.
 
 Notes:
-- Pass --fixup to auto-trim fields and slug tags at the CLI boundary (Step 16).
+- Pass --fixup to the commands that accept metadata to auto-trim fields and
+  normalize tags (slugify) at the CLI boundary.
+
+Environment:
+- The CLI eagerly loads `.env` at startup so that config like Chroma server
+  host/port or HF cache dirs are available to downstream modules.
+
+Implementation map:
+- Parsing: argparse
+- Metadata handling: rag.metadata, rag.metadata.validation
+- Pipeline: rag.pipeline.{ingest_file, ask_question, retrieve_preview, index_stats}
+- Admin ops: rag.admin.{backup,manage}
 """
 
 from __future__ import annotations
 
-# --- LOAD .env EARLY (so HF cache vars take effect before imports) ---
-from pathlib import Path
+# --- LOAD .env EARLY (so HF cache vars take effect before imports) ------------
+from pathlib import Path as _PathLike
 
 try:
+    # Load environment variables from project .env if present.
+    # This is important for things like:
+    # - Chroma server connection (CHROMA_API_IMPL, CHROMA_SERVER_HOST, ...)
+    # - HuggingFace caches/tokens (HF_HOME, HF_TOKEN)
     from dotenv import load_dotenv  # type: ignore
-    load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=True)
+    load_dotenv(dotenv_path=_PathLike(__file__).resolve().parents[1] / ".env", override=True)
 except Exception:
+    # If dotenv isn't available or reading .env fails, proceed with OS env only.
     pass
-# --------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
 
 import argparse
 import json
 import sys
-from pathlib import Path as _Path
+from pathlib import Path
 from typing import Optional, List
 
+# --- Internal imports: CLI <-> RAG system glue -------------------------------
 from rag.metadata import normalize_cli_metadata, DocumentMetadata
 from rag.metadata.validation import validate_cli_metadata
 from rag.loaders import infer_doc_type_from_path
@@ -52,7 +114,15 @@ from rag.admin.manage import (
 from rag.admin.backup import dump_index, restore_dump, vacuum_indexes, rebuild_embeddings
 
 
-def _detect_doc_type_from_ext(path: _Path) -> str:
+# -----------------------------------------------------------------------------
+# Small helpers
+# -----------------------------------------------------------------------------
+
+def _detect_doc_type_from_ext(path: Path) -> str:
+    """
+    Infer the document type (pdf/docx/pptx/html/csv/epub/md/txt/other) from the file path.
+    This keeps doc type detection consistent with the loader layer.
+    """
     return infer_doc_type_from_path(path)
 
 
@@ -62,6 +132,12 @@ def _validated_meta_from_args(
     inferred_doc_type: str | None = None,
     explicit_doc_type: bool = False,
 ) -> DocumentMetadata:
+    """
+    Build a DocumentMetadata object by:
+      1) collecting raw fields from argparse
+      2) validating + normalizing them (including optional fixup)
+      3) converting to the strongly-typed DocumentMetadata (enums for language/doc_type)
+    """
     raw = {
         "course": args.course,
         "unit": args.unit,
@@ -71,13 +147,18 @@ def _validated_meta_from_args(
         "semester": args.semester,
         "tags": args.tags,
     }
+
+    # validate_cli_metadata will:
+    # - trim/slug tags when --fixup is used
+    # - apply inferred_doc_type if user didn't pass --doc-type
     clean = validate_cli_metadata(
         raw,
         fixup=bool(getattr(args, "fixup", False)),
         inferred_doc_type=inferred_doc_type,
         explicit_doc_type=explicit_doc_type,
     )
-    # Hand off to existing normalizer to produce DocumentMetadata (enums etc.)
+
+    # normalize_cli_metadata returns DocumentMetadata with enum-like validated fields
     meta: DocumentMetadata = normalize_cli_metadata(
         course=clean.get("course"),
         unit=clean.get("unit"),
@@ -90,13 +171,26 @@ def _validated_meta_from_args(
     return meta
 
 
+# -----------------------------------------------------------------------------
+# Command implementations
+# -----------------------------------------------------------------------------
+
 def cmd_add(args: argparse.Namespace) -> int:
-    path = _Path(args.path)
+    """
+    Ingest a file into the corpus.
+    Side effects:
+      - Reads/loads the file via loaders (based on doc type)
+      - Chunks text and generates embeddings
+      - Upserts into BOTH Chroma (vectors) and BM25 (lexical JSONL)
+    """
+    path = Path(args.path)
     if not path.exists():
         print(f"ERROR: file not found: {path}", file=sys.stderr)
         return 2
 
     inferred_dt = _detect_doc_type_from_ext(path)
+
+    # Build metadata (honoring inferred vs explicit doc type)
     meta = _validated_meta_from_args(
         args=args,
         inferred_doc_type=inferred_dt,
@@ -106,9 +200,11 @@ def cmd_add(args: argparse.Namespace) -> int:
     try:
         res = ingest_file(path=path, doc_meta=meta)
     except Exception as e:
+        # Emit machine-readable error JSON for shell scripts/CI
         print(json.dumps({"action": "ingest", "file": str(path), "error": str(e)}), file=sys.stderr)
         return 1
 
+    # Emit a compact JSON summary for users/automation
     print(json.dumps({
         "action": "ingest",
         "file": str(path),
@@ -123,13 +219,19 @@ def cmd_add(args: argparse.Namespace) -> int:
 
 
 def cmd_ask(args: argparse.Namespace) -> int:
+    """
+    Run a hybrid retrieval + generation cycle for a natural language question.
+    Filters narrow the corpus by metadata (course/unit/author/tags/etc.).
+    """
     question = args.question.strip()
     if not question:
         print("ERROR: question cannot be empty", file=sys.stderr)
         return 2
 
+    # Build filters to apply during retrieval
     meta_filters: DocumentMetadata = _validated_meta_from_args(args=args)
 
+    # CLI uses "on"/"off" for hybrid; pipeline expects a bool
     hybrid = (args.hybrid == "on")
     try:
         res = ask_question(
@@ -142,6 +244,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
         print(json.dumps({"action": "query", "error": str(e)}), file=sys.stderr)
         return 1
 
+    # Note: res.sources is already a provenance list aligned with answer citations
     output = {
         "action": "query",
         "question": res.question,
@@ -157,6 +260,13 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 
 def cmd_preview(args: argparse.Namespace) -> int:
+    """
+    Retrieval-only preview (no LLM). Shows the ranked items with:
+      - provenance (source_path#pX:cY)
+      - snippet (first ~240 chars)
+      - fused score + per-store scores (vector distance / bm25 score)
+    Useful for debugging retrieval quality and filters before asking.
+    """
     question = args.question.strip()
     if not question:
         print("ERROR: question cannot be empty", file=sys.stderr)
@@ -188,6 +298,11 @@ def cmd_preview(args: argparse.Namespace) -> int:
 
 
 def cmd_stats(_args: argparse.Namespace) -> int:
+    """
+    Show index health (counts + disk usage).
+    - vector_count: items in Chroma
+    - disk_bytes: sizes for Chroma and BM25 persistence
+    """
     try:
         s = index_stats()
     except Exception as e:
@@ -200,6 +315,11 @@ def cmd_stats(_args: argparse.Namespace) -> int:
 # ---------- Backup / Export / Migration ----------
 
 def cmd_dump(args: argparse.Namespace) -> int:
+    """
+    Export the corpus to JSONL:
+    Each line includes id, text, sanitized metadata, text_sha1 and (optionally)
+    an embedding checksum for integrity checks across re-embeddings.
+    """
     include_emb = not bool(args.no_emb)
     try:
         n = dump_index(args.path, include_embedding_checksum=include_emb, batch_size=int(args.batch_size))
@@ -211,6 +331,9 @@ def cmd_dump(args: argparse.Namespace) -> int:
 
 
 def cmd_restore(args: argparse.Namespace) -> int:
+    """
+    Restore indexes from a JSONL dump (bulk upsert to Chroma + BM25).
+    """
     try:
         n = restore_dump(args.path, batch_size=int(args.batch_size))
     except Exception as e:
@@ -221,6 +344,11 @@ def cmd_restore(args: argparse.Namespace) -> int:
 
 
 def cmd_vacuum(_args: argparse.Namespace) -> int:
+    """
+    Housekeeping (best-effort):
+      - BM25: rewrite JSONL (compacts)
+      - Chroma: compact/persist if supported by wrapper
+    """
     try:
         status = vacuum_indexes()
     except Exception as e:
@@ -231,6 +359,10 @@ def cmd_vacuum(_args: argparse.Namespace) -> int:
 
 
 def cmd_rebuild(args: argparse.Namespace) -> int:
+    """
+    Re-embed *all* texts with a new embedding model; updates the vector store.
+    BM25 text stays the same (optionally re-saved to refresh timestamps).
+    """
     try:
         out = rebuild_embeddings(args.model, batch_size=int(args.batch_size))
     except Exception as e:
@@ -243,10 +375,18 @@ def cmd_rebuild(args: argparse.Namespace) -> int:
 # ---------- Ingestion management + validation ----------
 
 def _filters_from_args(args: argparse.Namespace) -> dict:
+    """
+    Helper to turn CLI args into normalized metadata filters dict.
+    (Reuses the same validation/normalization as ingestion.)
+    """
     return _validated_meta_from_args(args=args).to_dict()
 
 
 def cmd_list(args: argparse.Namespace) -> int:
+    """
+    List catalog entries with optional filters + paging.
+    Output includes id, source_path, page, chunk_id, and a metadata summary.
+    """
     where = _filters_from_args(args)
     entries = list_entries(where=where, limit=args.limit, offset=args.offset)
     out = {
@@ -274,6 +414,10 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_show(args: argparse.Namespace) -> int:
+    """
+    Show detailed info for one or more chunk IDs, or all chunks from a source path.
+    Useful to inspect actual snippet text and per-chunk metadata.
+    """
     if not args.id and not args.path:
         print("ERROR: show requires --id or --path", file=sys.stderr)
         return 2
@@ -290,7 +434,7 @@ def cmd_show(args: argparse.Namespace) -> int:
             {
                 "id": e.id,
                 "metadata": e.metadata,
-                "snippet": (e.text or "")[:1000],
+                "snippet": (e.text or "")[:1000],  # truncate to keep JSON readable
             }
             for e in entries
         ],
@@ -300,7 +444,15 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 
 def cmd_delete(args: argparse.Namespace) -> int:
-    # Determine target IDs
+    """
+    Delete chunks from BOTH vector store and BM25 index.
+    Selection options:
+      - --id ...         : explicit chunk IDs
+      - --path PATH      : all chunks from a specific source file
+      - [filters]        : by metadata (course/unit/tags/etc.)
+    Use --dry-run to preview without deleting.
+    """
+    # Resolve target IDs from (id | path | filters)
     ids: List[str] = []
     if args.id:
         ids = list(args.id)
@@ -324,19 +476,28 @@ def cmd_delete(args: argparse.Namespace) -> int:
 
 
 def cmd_reingest(args: argparse.Namespace) -> int:
+    """
+    Re-process entire source files. You can target by:
+      - --path PATH ...   : one or more file paths
+      - --id ID ...       : all source files corresponding to these chunk IDs
+      - [filters]         : resolve to a set of source files by metadata
+    IMPORTANT: metadata is consolidated from existing catalog entries for those paths.
+    This is perfect for refreshing content with the SAME metadata (e.g., after changing
+    chunk size or upgrading the embedder), but it won't introduce *new* metadata.
+    """
     targets: List[str] = []
 
     if args.path:
-        # accept multiple --path
+        # Accept multiple --path flags
         targets = [str(Path(p).expanduser().resolve()) for p in args.path]
     elif args.id:
-        # map IDs -> source paths
+        # Map chunk IDs -> source_path(s)
         ids = list(args.id)
         show = show_entries_by_id(ids)
         spaths = {str(e.metadata.get("source_path") or "") for e in show if e.metadata.get("source_path")}
         targets = sorted(str(Path(p).expanduser().resolve()) for p in spaths if p)
     else:
-        # resolve by filters -> source paths
+        # Resolve by filters -> source_path(s)
         where = _filters_from_args(args)
         targets = list_source_paths(where=where)
 
@@ -358,11 +519,19 @@ def cmd_reingest(args: argparse.Namespace) -> int:
     return 0
 
 
+# -----------------------------------------------------------------------------
+# Argument parser construction
+# -----------------------------------------------------------------------------
+
 def build_parser() -> argparse.ArgumentParser:
+    """
+    Define CLI structure, flags, choices, defaults, and handlers.
+    Each subparser sets .set_defaults(func=...), which is called by main().
+    """
     p = argparse.ArgumentParser(prog="classmate", description="CLASSMATE-RAG CLI")
     sub = p.add_subparsers(dest="command", required=True)
 
-    # add
+    # --- add ---
     pa = sub.add_parser("add", help="Ingest a file with metadata")
     pa.add_argument("path", help="Path to the document to ingest")
     pa.add_argument("--course", type=str, help="Course code or name")
@@ -375,7 +544,7 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pa.set_defaults(func=cmd_add)
 
-    # ask
+    # --- ask ---
     pq = sub.add_parser("ask", help="Ask a question with optional metadata filters")
     pq.add_argument("question", help="The user question in English or Italian (use quotes)")
     pq.add_argument("--course", type=str, help="Filter by course")
@@ -390,7 +559,7 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pq.set_defaults(func=cmd_ask)
 
-    # preview
+    # --- preview ---
     pp = sub.add_parser("preview", help="Preview retrieval results (no generation)")
     pp.add_argument("question", help="The query/question")
     pp.add_argument("--course", type=str, help="Filter by course")
@@ -405,34 +574,34 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pp.set_defaults(func=cmd_preview)
 
-    # stats
+    # --- stats ---
     ps = sub.add_parser("stats", help="Show index health and disk usage")
     ps.set_defaults(func=cmd_stats)
 
-    # dump
+    # --- dump ---
     pd = sub.add_parser("dump", help="Export corpus to a JSONL dump")
     pd.add_argument("--path", required=True, help="Output JSONL path (e.g., dumps/corpus.jsonl)")
     pd.add_argument("--batch-size", type=int, default=256, help="Batch size for embedding checksum")
     pd.add_argument("--no-emb", action="store_true", help="Do not compute embedding checksums (faster, smaller)")
     pd.set_defaults(func=cmd_dump)
 
-    # restore
+    # --- restore ---
     pr = sub.add_parser("restore", help="Restore indexes from a JSONL dump")
     pr.add_argument("--path", required=True, help="Input JSONL path")
     pr.add_argument("--batch-size", type=int, default=256, help="Batch size for re-embedding")
     pr.set_defaults(func=cmd_restore)
 
-    # vacuum
+    # --- vacuum ---
     pv = sub.add_parser("vacuum", help="Compact/housekeep indexes (best-effort)")
     pv.set_defaults(func=cmd_vacuum)
 
-    # rebuild
+    # --- rebuild ---
     prebuild = sub.add_parser("rebuild", help="Re-embed all texts with a new embedding model")
     prebuild.add_argument("--model", required=True, help="New embedding model name/path")
     prebuild.add_argument("--batch-size", type=int, default=256, help="Batch size for re-embedding")
     prebuild.set_defaults(func=cmd_rebuild)
 
-    # list
+    # --- list ---
     pl = sub.add_parser("list", help="List indexed chunks by metadata filters")
     pl.add_argument("--course", type=str, help="Filter by course")
     pl.add_argument("--unit", type=str, help="Filter by unit")
@@ -446,13 +615,13 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pl.set_defaults(func=cmd_list)
 
-    # show
+    # --- show ---
     pshow = sub.add_parser("show", help="Show detailed info for one or more chunk IDs, or all chunks of a path")
     pshow.add_argument("--id", nargs="+", help="One or more chunk IDs")
     pshow.add_argument("--path", type=str, help="Source file path")
     pshow.set_defaults(func=cmd_show)
 
-    # delete
+    # --- delete ---
     pdel = sub.add_parser("delete", help="Delete chunks from BOTH vector + BM25 indexes")
     pdel.add_argument("--id", nargs="+", help="One or more chunk IDs to delete")
     pdel.add_argument("--path", type=str, help="Delete all chunks for a given source file")
@@ -467,7 +636,7 @@ def build_parser() -> argparse.ArgumentParser:
     pdel.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pdel.set_defaults(func=cmd_delete)
 
-    # reingest
+    # --- reingest ---
     pre = sub.add_parser("reingest", help="Reingest by path(s), by id(s), or by filters (affects WHOLE files)")
     pre.add_argument("--path", nargs="+", help="One or more file paths to reingest")
     pre.add_argument("--id", nargs="+", help="One or more chunk IDs (their source file(s) will be reingested)")
@@ -486,10 +655,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    """
+    Entrypoint for module execution:
+      - Parse CLI args
+      - Dispatch to subcommand handler
+      - Return handler's exit code as process exit code
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)
 
 
 if __name__ == "__main__":
+    # Allow executing this file directly: `python cli/main.py ...`
     raise SystemExit(main())

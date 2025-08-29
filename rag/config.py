@@ -99,8 +99,6 @@ class Config:
         If auto-download is desired, higher-level code will call the model fetcher.
         """
         path = self.llm_model_path.expanduser().resolve()
-        # We do NOT require that the file exists here; caller can auto-download if missing.
-        # Just return the resolved path to be used by the loader.
         return path
 
 

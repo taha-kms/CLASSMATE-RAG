@@ -29,13 +29,9 @@ langdetect>=1.0.9,<1.1
 
 # CLI / utilities
 tqdm>=4.66,<5
-pydantic>=2.7,<3
+pydantic<2
 
 # Model download + env loading
 huggingface_hub>=0.23,<1
 python-dotenv>=1.0,<2
 hf_xet
-
-# NOTE:
-# - Torch will be pulled transitively by sentence-transformers. If you need a specific CUDA/CPU build,
-#   install it explicitly BEFORE running `pip install -r requirements.txt`.
