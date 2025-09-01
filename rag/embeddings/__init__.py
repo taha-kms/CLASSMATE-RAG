@@ -1,3 +1,10 @@
+"""
+Embedding utilities using SentenceTransformers (E5 model).
+
+Provides:
+- E5MultilingualEmbedder: wrapper for intfloat/multilingual-e5-base
+"""
+
 from __future__ import annotations
 
 import os
@@ -10,12 +17,12 @@ from sentence_transformers import SentenceTransformer
 
 def _resolve_cache_dir() -> str | None:
     """
-    Decide where to cache embedding models.
+    Pick a directory for caching downloaded models.
     Priority:
       1) SENTENCE_TRANSFORMERS_HOME
       2) HUGGINGFACE_HUB_CACHE
       3) HF_HOME
-    If set, return an ABSOLUTE path (created if missing).
+    Returns an absolute path or None.
     """
     for key in ("SENTENCE_TRANSFORMERS_HOME", "HUGGINGFACE_HUB_CACHE", "HF_HOME"):
         v = os.getenv(key)
@@ -30,9 +37,9 @@ class E5MultilingualEmbedder:
     """
     Wrapper around SentenceTransformer('intfloat/multilingual-e5-base').
 
-    - Adds 'query:' / 'passage:' prefixes as required by E5.
-    - L2-normalizes embeddings.
-    - Forces cache directory from env so models can live under ./models/hf_cache if desired.
+    - Adds "query:" / "passage:" prefixes as required by the model.
+    - Normalizes embeddings (L2).
+    - Supports custom cache directory and HuggingFace token from env.
     """
 
     def __init__(
@@ -49,7 +56,6 @@ class E5MultilingualEmbedder:
             "device": device,
             "trust_remote_code": False,
         }
-        # sentence-transformers >=2.2 supports 'cache_folder' and 'token'
         if cache_dir:
             st_kwargs["cache_folder"] = cache_dir
         if hf_token:
@@ -58,19 +64,26 @@ class E5MultilingualEmbedder:
         self.model = SentenceTransformer(**st_kwargs)
         self.normalize = bool(normalize)
 
-    # ---- E5 formatting helpers ----
+    # ------------------------------
+    # Helpers for E5 input formatting
+    # ------------------------------
 
     @staticmethod
     def _fmt_queries(queries: Iterable[str]) -> List[str]:
+        """Add 'query:' prefix required by E5."""
         return [f"query: {q}" for q in queries]
 
     @staticmethod
     def _fmt_passages(texts: Iterable[str]) -> List[str]:
+        """Add 'passage:' prefix required by E5."""
         return [f"passage: {t}" for t in texts]
 
-    # ---- Public encode APIs ----
+    # ------------------------------
+    # Public API
+    # ------------------------------
 
     def encode_queries(self, queries: Iterable[str]) -> np.ndarray:
+        """Encode queries into float32 embeddings."""
         vecs = self.model.encode(
             self._fmt_queries(queries),
             convert_to_numpy=True,
@@ -81,6 +94,7 @@ class E5MultilingualEmbedder:
         return vecs.astype("float32", copy=False)
 
     def encode_passages(self, texts: Iterable[str]) -> np.ndarray:
+        """Encode passages into float32 embeddings."""
         vecs = self.model.encode(
             self._fmt_passages(texts),
             convert_to_numpy=True,
@@ -89,7 +103,6 @@ class E5MultilingualEmbedder:
             batch_size=32,
         )
         return vecs.astype("float32", copy=False)
-
 
 
 __all__ = ["E5MultilingualEmbedder"]
