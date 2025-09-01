@@ -1,19 +1,10 @@
 """
-Citation post-processing for CLASSMATE-RAG.
+Clean up and enforce inline numeric citations like [1], [2].
 
-Goals
-- Remove out-of-range [n] citations (e.g., hallucinated [9] when only [1..K] exist).
-- Normalize/compact adjacent citations: "[1] [2]" -> "[1][2]" and " [1], [2] " -> "[1][2]".
-- Optionally append a human-readable "Sources" block listing the cited items.
-
-Public API:
-    enforce_citations(
-        answer: str,
-        provenance: list[str],
-        *,
-        add_sources_block: bool = False,
-        sources_title: str = "Sources"
-    ) -> str
+What this does:
+- Remove citations that point outside the available range.
+- Merge adjacent citations (e.g., "[1] [2]" → "[1][2]").
+- Optionally append a plain "Sources" list with the cited items.
 """
 
 from __future__ import annotations
@@ -22,18 +13,19 @@ import re
 from typing import Iterable, List, Set
 
 
-# --- Regexes for [n] tokens and adjacency cleanup ---
+# --- Patterns for citation tokens and fixing spacing between them ---
 
-_CIT_RE = re.compile(r"\[(\d+)\]")
-# normalize separators between adjacent citations: "] [", "], [", "]  [", etc.
-_ADJ_RE = re.compile(r"\]\s*(?:,?\s*)\[")
+_CIT_RE = re.compile(r"\[(\d+)\]")               # matches [number]
+_ADJ_RE = re.compile(r"\]\s*(?:,?\s*)\[")        # matches "] [", "], [", "]   [", etc.
 
 
 def _extract_citation_indices(text: str) -> List[int]:
+    """Return all citation numbers found in the text (as ints)."""
     return [int(m.group(1)) for m in _CIT_RE.finditer(text or "")]
 
 
 def _dedupe_preserve_order(nums: Iterable[int]) -> List[int]:
+    """Remove duplicates from a sequence while preserving the original order."""
     seen: Set[int] = set()
     out: List[int] = []
     for n in nums:
@@ -45,32 +37,29 @@ def _dedupe_preserve_order(nums: Iterable[int]) -> List[int]:
 
 def _remove_out_of_range(text: str, *, max_idx: int) -> str:
     """
-    Removes any [n] where n < 1 or n > max_idx.
+    Drop any [n] where n < 1 or n > max_idx, then compact adjacent citations.
     """
     def _repl(m):
         n = int(m.group(1))
         if n < 1 or n > max_idx:
-            return ""  # drop hallucinated reference
+            return ""  # remove invalid reference
         return m.group(0)
-    # pass 1: drop bad refs
-    cleaned = _CIT_RE.sub(_repl, text or "")
-    # pass 2: collapse leftover whitespace between adjacent citations
-    cleaned = _ADJ_RE.sub("][", cleaned)
-    # also collapse any double spaces created
-    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+
+    cleaned = _CIT_RE.sub(_repl, text or "")      # remove invalid [n]
+    cleaned = _ADJ_RE.sub("][", cleaned)          # join adjacent citations
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()  # normalize extra spaces
     return cleaned
 
 
 def _format_sources_block(cited_idxs: List[int], provenance: List[str], title: str) -> str:
     """
-    Build a human-readable list of cited sources in ascending citation order.
-    Only include indices that actually appeared in the (cleaned) answer.
+    Build a human-readable list of the cited sources in order of citation.
+    Only indices that exist are included.
     """
     if not cited_idxs:
         return ""
     lines = [title]
     for i in cited_idxs:
-        # guard against out-of-range even after cleaning
         if 1 <= i <= len(provenance):
             lines.append(f"[{i}] {provenance[i - 1]}")
     return "\n" + "\n".join(lines)
@@ -84,24 +73,29 @@ def enforce_citations(
     sources_title: str = "Sources",
 ) -> str:
     """
-    Sanitize inline citations in 'answer' based on provided 'provenance' list.
-    - Drops any [n] with n outside 1..len(provenance).
-    - Compacts adjacent citations to "[1][2]".
-    - Optionally appends a Sources block listing only the cited ones.
+    Clean an LLM answer's in-text citations and (optionally) append a sources list.
 
-    Returns the modified answer (may be identical if nothing to fix).
+    Args:
+        answer: the raw model output that may contain [n] citations
+        provenance: list of source strings; valid indices are 1..len(provenance)
+        add_sources_block: if True, append a "Sources" section at the end
+        sources_title: custom title for the sources section
+
+    Returns:
+        The cleaned answer (and possibly an appended sources list).
     """
-    if not answer:
-        return answer or ""
+    if not (answer or "").strip():
+        return ""
 
-    max_idx = len(provenance or [])
+    # 1) Remove invalid citations and compact adjacent ones.
+    max_idx = len(provenance)
     cleaned = _remove_out_of_range(answer, max_idx=max_idx)
 
-    # collect only citations that survived cleaning
-    cited = _extract_citation_indices(cleaned)
-    cited = _dedupe_preserve_order(cited)
+    if not add_sources_block:
+        return cleaned
 
-    if add_sources_block and cited:
-        cleaned += _format_sources_block(cited, provenance or [], sources_title)
+    # 2) Gather the unique, in-order citations that remain after cleaning.
+    cited = _dedupe_preserve_order(_extract_citation_indices(cleaned))
 
-    return cleaned
+    # 3) Append a simple "Sources" block if any valid citations exist.
+    return cleaned + _format_sources_block(cited, provenance, sources_title)

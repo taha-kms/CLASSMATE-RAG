@@ -1,18 +1,5 @@
 """
-Llama 3.1-8B runner using llama-cpp-python.
-
-- Loads GGUF via model path from env-config (rag.config / classmate.config).
-- Ensures the model file exists locally; if missing, triggers auto-download via rag.model_fetch.
-- Provides a simple chat() interface returning the assistant's text.
-
-Notes:
-- Defaults are conservative for CPU+low-VRAM laptops. Adjust n_gpu_layers to offload more layers to GPU if available.
-- Streaming is not implemented here; we return the full completion for simplicity in the CLI.
-
-Step 19 additions:
-- Read optional env/config knobs:
-    * LLAMA_N_GPU_LAYERS (int)   -> offload to GPU if supported
-    * LLAMA_N_THREADS (int)      -> override CPU threads
+Wrapper for llama-cpp-python to load and run LLaMA models.
 """
 
 from __future__ import annotations
@@ -30,87 +17,79 @@ from rag.model_fetch import ensure_llama_model_available
 
 @dataclass
 class LlamaCppRunner:
-    model_path: Optional[str] = None
-    n_ctx: int = 4096
-    n_threads: Optional[int] = None      # default: os.cpu_count()
-    n_gpu_layers: int = 0                # 0 = CPU only. Increase to offload to GPU if available.
-    seed: int = 42
-    temperature: float = 0.2
-    top_p: float = 0.95
-    repeat_penalty: float = 1.1
-    max_tokens: int = 512
+    """
+    Simple wrapper around llama_cpp.Llama.
+    Provides:
+    - model loading
+    - basic text generation
+    """
 
-    # internal
-    _llm: Optional[Llama] = None
-    _loaded_path: Optional[Path] = None
-
-    def _resolve_model_path(self) -> Path:
-        if self.model_path:
-            return Path(self.model_path).expanduser().resolve()
-
-        cfg = load_config()
-        # Validate/get path (does not require file to exist yet)
-        _ = cfg.validate_for_llm()
-        # Ensure model is available (auto-download if needed)
-        path = ensure_llama_model_available()
-        return Path(path)
-
-    def _ensure_llm(self) -> Llama:
-        if self._llm is not None:
-            return self._llm
-
-        path = self._resolve_model_path()
-        self._loaded_path = path
-
-        env_threads = os.getenv("LLAMA_N_THREADS")
-        env_gpu = os.getenv("LLAMA_N_GPU_LAYERS")
-        n_threads = int(env_threads) if (env_threads and env_threads.isdigit()) else (self.n_threads or os.cpu_count() or 4)
-        n_gpu_layers = int(env_gpu) if (env_gpu and env_gpu.strip("-").isdigit()) else self.n_gpu_layers
-
-        self._llm = Llama(
-            model_path=str(path),
-            n_ctx=self.n_ctx,
-            n_threads=n_threads,
-            n_gpu_layers=n_gpu_layers,
-            seed=self.seed,
-            logits_all=False,
-            vocab_only=False,
-            use_mlock=False,
-            use_mmap=True,
-            verbose=False,
-        )
-        return self._llm
-
-    def chat(
+    def __init__(
         self,
-        messages: List[dict],
+        model_path: str,
         *,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        repeat_penalty: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stop: Optional[list[str]] = None,
+        n_ctx: int = 2048,
+        n_gpu_layers: Optional[int] = None,
+        seed: int = 42,
+        verbose: bool = False,
+    ) -> None:
+        """
+        Load a LLaMA model.
+
+        Args:
+            model_path: path to the model file
+            n_ctx: context window size
+            n_gpu_layers: number of layers on GPU (None → auto/env)
+            seed: random seed
+            verbose: show llama-cpp logs
+        """
+        p = Path(model_path).expanduser().resolve()
+        if not p.exists():
+            raise FileNotFoundError(f"Model file not found: {p}")
+
+        gpu_layers = n_gpu_layers
+        if gpu_layers is None:
+            gpu_layers = int(os.getenv("LLAMA_GPU_LAYERS", "0"))
+
+        self.model = Llama(
+            model_path=str(p),
+            n_ctx=n_ctx,
+            n_gpu_layers=gpu_layers,
+            seed=seed,
+            verbose=verbose,
+        )
+        return self.model
+
+    def generate(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.7,
+        top_p: float = 0.95,
+        top_k: int = 40,
+        stop: Optional[List[str]] = None,
     ) -> str:
         """
-        Run a chat completion. 'messages' must be a list of dicts with 'role' and 'content',
-        e.g., [{"role":"system","content":"..."},{"role":"user","content":"..."}].
-        Returns the assistant text.
-        """
-        llm = self._ensure_llm()
-        t = self.temperature if temperature is None else float(temperature)
-        p = self.top_p if top_p is None else float(top_p)
-        rp = self.repeat_penalty if repeat_penalty is None else float(repeat_penalty)
-        mt = self.max_tokens if max_tokens is None else int(max_tokens)
+        Generate text.
 
-        out = llm.create_chat_completion(
-            messages=messages,
-            temperature=t,
-            top_p=p,
-            repeat_penalty=rp,
-            max_tokens=mt,
-            stop=stop or [],
+        Args:
+            prompt: input text
+            max_tokens: max tokens to generate
+            temperature: sampling temperature
+            top_p: nucleus sampling
+            top_k: top-k filtering
+            stop: optional stop tokens
+
+        Returns:
+            Generated text.
+        """
+        res = self.model(
+            prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            stop=stop,
         )
-        try:
-            return out["choices"][0]["message"]["content"].strip()
-        except Exception:
-            return ""
+        return res["choices"][0]["text"].strip()
