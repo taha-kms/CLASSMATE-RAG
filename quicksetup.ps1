@@ -34,6 +34,12 @@ if ((Test-Path ".env.example") -and -not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
 }
 
+# --- Create rag.cmd shortcut ---
+$RagCmd = "$VENV_DIR\Scripts\rag.cmd"
+Write-Host "==> Creating rag command shortcut..."
+"@echo off`r`npython -m rag.cli %*" | Out-File -FilePath $RagCmd -Encoding ASCII -Force
+
+# --- Start vector DB via Docker ---
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     if (Test-Path $DOCKER_COMPOSE_FILE) {
         Write-Host "==> Starting vector DB via docker compose..."
@@ -48,5 +54,6 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     Write-Host "NOTE: Docker not installed. Skipping Docker startup."
 }
 
-Write-Host "Setup complete."
+Write-Host "✅ Setup complete."
 Write-Host "To activate the venv in future sessions: .\$VENV_DIR\Scripts\Activate.ps1"
+Write-Host "Then run: rag --help"

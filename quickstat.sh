@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --- Config ---
 VENV_DIR=".venv"
 REQ_FILE="requirements.txt"
 DOCKER_COMPOSE_FILE="docker-compose.yml"
@@ -15,64 +14,49 @@ fi
 
 PY=python3
 
-echo "==> Creating virtual environment at ${VENV_DIR} (if missing)..."
+echo "==> Creating virtual environment..."
 if [ ! -d "${VENV_DIR}" ]; then
   ${PY} -m venv "${VENV_DIR}"
 fi
 
-# shellcheck disable=SC1090
 source "${VENV_DIR}/bin/activate"
 
-echo "==> Upgrading pip and wheel..."
+echo "==> Upgrading pip..."
 python -m pip install --upgrade pip wheel
 
 if [ -f "${REQ_FILE}" ]; then
-  echo "==> Installing Python dependencies from ${REQ_FILE}..."
+  echo "==> Installing dependencies..."
   pip install -r "${REQ_FILE}"
 else
-  echo "WARNING: ${REQ_FILE} not found. Skipping Python dependency install."
+  echo "WARNING: ${REQ_FILE} not found. Skipping dependencies."
 fi
 
-# Optional: bootstrap .env
 if [ -f ".env.example" ] && [ ! -f ".env" ]; then
-  echo "==> Creating .env from .env.example (edit as needed)..."
-  cp .env.example .env || true
+  echo "==> Copying .env.example → .env"
+  cp .env.example .env
 fi
 
-# --- Start vector DB via Docker Compose ---
-start_chroma() {
-  local compose_cmd="$1"
+# --- Create rag shortcut command ---
+RAG_BIN="${VENV_DIR}/bin/rag"
+echo "==> Creating rag command shortcut..."
+cat > "${RAG_BIN}" <<'EOF'
+#!/usr/bin/env bash
+exec python -m rag.cli "$@"
+EOF
+chmod +x "${RAG_BIN}"
+
+# --- Start vector DB via Docker ---
+if command -v docker >/dev/null 2>&1; then
   if [ -f "${DOCKER_COMPOSE_FILE}" ]; then
-    echo "==> Starting vector DB with ${compose_cmd}..."
-    if ${compose_cmd} up -d "${CHROMA_SERVICE_NAME}"; then
-      echo "==> '${CHROMA_SERVICE_NAME}' service started."
-    else
-      echo "==> Service '${CHROMA_SERVICE_NAME}' not found or failed. Bringing up all services..."
-      ${compose_cmd} up -d
-    fi
+    echo "==> Starting vector DB via docker compose..."
+    docker compose up -d "${CHROMA_SERVICE_NAME}" || docker compose up -d
   else
     echo "NOTE: ${DOCKER_COMPOSE_FILE} not found. Skipping Docker startup."
-  fi
-}
-
-echo "==> Checking Docker..."
-if command -v docker >/dev/null 2>&1; then
-  if docker info >/dev/null 2>&1; then
-    if docker compose version >/dev/null 2>&1; then
-      start_chroma "docker compose"
-    elif command -v docker-compose >/dev/null 2>&1; then
-      start_chroma "docker-compose"
-    else
-      echo "NOTE: 'docker compose'/'docker-compose' not found. Skipping Docker startup."
-    fi
-  else
-    echo "NOTE: Docker daemon not running or permission denied. Skipping Docker startup."
   fi
 else
   echo "NOTE: Docker not installed. Skipping Docker startup."
 fi
 
-echo ""
-echo "Setup complete."
-echo "- To activate the venv:  source ${VENV_DIR}/bin/activate"
-echo "- To bring services down: docker compose down  (or docker-compose down)"
+echo "✅ Setup complete."
+echo "To activate the venv: source ${VENV_DIR}/bin/activate"
+echo "Then run: rag --help"
