@@ -1,22 +1,16 @@
 """
-Corpus management helpers for CLASSMATE-RAG.
+Helpers to manage the corpus across BM25 and Chroma indexes.
 
-Provides list/show/delete/reingest operations that work across BOTH
-Chroma (vector index) and the BM25 lexical index.
+Provides functions to:
+- list entries
+- show entries by ID
+- resolve chunk IDs
+- delete chunks
+- reingest files
+- list source paths
 
-Design goals
-- Deterministic, metadata-driven curation.
-- Safe delete (both stores), with --dry-run preview support at the CLI layer.
-- Minimal coupling: BM25 JSONL acts as a readable "catalog" of chunks.
-- Idempotent operations: re-running is safe.
-
-Notes
-- BM25 persistence is expected at: ./indexes/bm25/bm25_index.jsonl
-  (See rag/retrieval/bm25.py docstring.)
-- Vector store operations are invoked via ChromaVectorStore wrapper.
-
-This module intentionally has NO print/log side effects:
-the CLI layer is responsible for user I/O.
+BM25 JSONL file is used as the main catalog. 
+All operations are safe to repeat (idempotent).
 """
 
 from __future__ import annotations
@@ -32,29 +26,32 @@ from rag.pipeline import ingest_file
 from rag.retrieval import ChromaVectorStore, BM25Store
 
 
-# ---- Constants ----
+# ------------------------------
+# Constants
+# ------------------------------
 
 _BM25_DIR = Path("./indexes/bm25")
 _BM25_JSONL = _BM25_DIR / "bm25_index.jsonl"
 
 
-# ---- Data types ----
+# ------------------------------
+# Data type
+# ------------------------------
 
 @dataclass(frozen=True)
 class CatalogEntry:
+    """Represents one entry (chunk) in the BM25 catalog."""
     id: str
     text: str
     metadata: Dict[str, object]
 
 
-# ---- Internal helpers ----
+# ------------------------------
+# Internal helpers
+# ------------------------------
 
 def _read_bm25_catalog() -> List[CatalogEntry]:
-    """
-    Read the BM25 JSONL catalog. Each line is an object with at least:
-      { "id": str, "text": str, "metadata": { ... } }
-    Returns empty list if file missing.
-    """
+    """Read BM25 catalog JSONL and return a list of entries."""
     out: List[CatalogEntry] = []
     if not _BM25_JSONL.exists():
         return out
@@ -71,23 +68,19 @@ def _read_bm25_catalog() -> List[CatalogEntry]:
                 if cid:
                     out.append(CatalogEntry(id=cid, text=txt, metadata=dict(meta)))
             except Exception:
-                # ignore malformed lines
                 continue
     return out
 
 
 def _matches_simple(meta: Mapping[str, object], where: Mapping[str, object]) -> bool:
-    """
-    Simple equality-based filtering on known fields, plus tag_* booleans.
-    Values in 'where' that are None/empty are ignored.
-    """
+    """Check if metadata matches filter values (simple equality and tag checks)."""
     if not where:
         return True
     for k, v in where.items():
         if v is None:
             continue
         if k == "tags":
-            # tags can be comma-separated or list -> expand to tag_* booleans
+            # Tags can be string or list; check tag_* flags in metadata
             tags: List[str] = []
             if isinstance(v, (list, tuple)):
                 tags = [str(x).strip().lower() for x in v if str(x).strip()]
@@ -97,13 +90,13 @@ def _matches_simple(meta: Mapping[str, object], where: Mapping[str, object]) -> 
                 if not meta.get(f"tag_{t}", False):
                     return False
             continue
-        # regular equality
         if str(meta.get(k, "")).strip() != str(v).strip():
             return False
     return True
 
 
 def _collect_source_paths(entries: Sequence[CatalogEntry]) -> List[str]:
+    """Return unique source_path values from catalog entries."""
     paths: List[str] = []
     seen: set[str] = set()
     for e in entries:
@@ -115,6 +108,7 @@ def _collect_source_paths(entries: Sequence[CatalogEntry]) -> List[str]:
 
 
 def _group_by_source(entries: Sequence[CatalogEntry]) -> Dict[str, List[CatalogEntry]]:
+    """Group entries by their source_path."""
     by: Dict[str, List[CatalogEntry]] = {}
     for e in entries:
         sp = str(e.metadata.get("source_path") or "")
@@ -122,7 +116,9 @@ def _group_by_source(entries: Sequence[CatalogEntry]) -> Dict[str, List[CatalogE
     return by
 
 
-# ---- Public API ----
+# ------------------------------
+# Public API
+# ------------------------------
 
 def list_entries(
     *,
@@ -130,9 +126,7 @@ def list_entries(
     limit: Optional[int] = None,
     offset: int = 0,
 ) -> List[CatalogEntry]:
-    """
-    Return catalog entries filtered by metadata, with optional paging.
-    """
+    """List catalog entries filtered by metadata, with optional paging."""
     cat = _read_bm25_catalog()
     filt = [e for e in cat if _matches_simple(e.metadata, where or {})]
     if offset < 0:
@@ -143,9 +137,7 @@ def list_entries(
 
 
 def show_entries_by_id(ids: Iterable[str]) -> List[CatalogEntry]:
-    """
-    Return catalog entries for the given IDs, preserving input order.
-    """
+    """Return catalog entries matching the given IDs (preserve order)."""
     want = [str(x) for x in ids]
     if not want:
         return []
@@ -166,10 +158,10 @@ def resolve_ids(
     path: Optional[str] = None,
 ) -> List[str]:
     """
-    Resolve a concrete list of chunk IDs by (ids | path | where).
-    - If 'ids' provided, use them directly (filtering out unknown).
-    - Else if 'path' provided, select all chunks from that source_path.
-    - Else use 'where' filter.
+    Get chunk IDs from ids, path, or filter.
+    - If ids provided → use directly (if they exist).
+    - If path provided → select all from that file.
+    - Otherwise → filter by metadata.
     """
     cat = _read_bm25_catalog()
     if ids:
@@ -180,30 +172,24 @@ def resolve_ids(
         path = str(Path(path).resolve())
         return [e.id for e in cat if str(e.metadata.get("source_path") or "") == path]
 
-    # where
     return [e.id for e in cat if _matches_simple(e.metadata, where or {})]
 
 
 def delete_by_ids(ids: Sequence[str]) -> Tuple[int, int]:
     """
-    Delete the given chunk IDs from BOTH vector store and BM25 store.
-
-    Returns:
-        (n_deleted_vectors, n_deleted_bm25)
+    Delete given chunk IDs from both vector and BM25 stores.
+    Returns (num_deleted_from_vector, num_deleted_from_bm25).
     """
     if not ids:
         return (0, 0)
 
-    # Vector store delete
     vec = ChromaVectorStore.from_config()
     n_vec = 0
     try:
-        n_vec = vec.delete(ids=list(ids)) or 0  # delete should return count; tolerate None
+        n_vec = vec.delete(ids=list(ids)) or 0
     except Exception:
-        # If wrapper doesn't return a count, we cannot estimate reliably
         n_vec = len(ids)
 
-    # BM25 store delete
     bm = BM25Store.load_or_create(str(_BM25_DIR))
     n_bm25 = bm.delete_many(ids=list(ids))
     bm.save()
@@ -213,12 +199,11 @@ def delete_by_ids(ids: Sequence[str]) -> Tuple[int, int]:
 
 def reingest_paths(paths: Sequence[str]) -> List[Dict[str, object]]:
     """
-    Reingest the given file paths using metadata inferred from existing catalog entries.
-    For each unique source_path, we consolidate metadata across its chunks:
-    - course/unit/language/doc_type/author/semester/tags
-    (Preference: first non-empty; tags = union)
-
-    Returns a list of ingest summaries compatible with IngestResult.__dict__.
+    Reingest files by their paths.
+    Metadata is inferred from existing catalog entries:
+    - first non-empty values for fields
+    - tags combined as a union
+    Returns a list of ingest results.
     """
     if not paths:
         return []
@@ -230,7 +215,6 @@ def reingest_paths(paths: Sequence[str]) -> List[Dict[str, object]]:
     for raw in paths:
         p = Path(raw).expanduser().resolve()
         key = str(p)
-        # consolidate metadata from existing chunks (if any)
         mlist = by_path.get(key, [])
         course = unit = language = doc_type = author = semester = None
         tags_set: set[str] = set()
@@ -243,7 +227,6 @@ def reingest_paths(paths: Sequence[str]) -> List[Dict[str, object]]:
             doc_type = doc_type or md.get("doc_type")
             author = author or md.get("author")
             semester = semester or md.get("semester")
-            # tags are flattened to tag_* booleans — recover names by stripping prefix
             for mk, mv in md.items():
                 if mk.startswith("tag_") and mv:
                     tags_set.add(mk[len("tag_") :])
@@ -252,7 +235,7 @@ def reingest_paths(paths: Sequence[str]) -> List[Dict[str, object]]:
         doc_meta = DocumentMetadata(
             course=course or None,
             unit=unit or None,
-            language=language or None,  # normalize_cli_metadata inside ingest handles auto/en/it
+            language=language or None,
             doc_type=doc_type or None,
             author=author or None,
             semester=semester or None,
@@ -277,8 +260,6 @@ def list_source_paths(
     *,
     where: Optional[Mapping[str, object]] = None
 ) -> List[str]:
-    """
-    Return unique source_path values matching the filter.
-    """
+    """Return all unique source_path values matching a filter."""
     entries = list_entries(where=where)
     return _collect_source_paths(entries)

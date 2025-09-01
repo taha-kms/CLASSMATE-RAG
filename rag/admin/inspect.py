@@ -1,8 +1,9 @@
 """
-Admin/observability helpers for CLASSMATE-RAG.
+Tools to check and debug the RAG indexes.
 
-- retrieve_preview(): run retrieval only and show what would be fed to the model
-- index_stats(): quick index health (counts + disk usage)
+Functions:
+- retrieve_preview: run retrieval only (no LLM) and show what would be returned.
+- index_stats: report vector count and disk usage for indexes.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional
+from typing import Dict, List, Mapping
 
 from rag.config import load_config
 from rag.embeddings import E5MultilingualEmbedder
@@ -19,7 +20,12 @@ from rag.retrieval.fusion import HybridRetriever
 from rag.generation import format_context_blocks
 
 
+# ------------------------------
+# Helpers
+# ------------------------------
+
 def _du_bytes(path: Path) -> int:
+    """Return disk usage (in bytes) of a file or directory."""
     if not path.exists():
         return 0
     if path.is_file():
@@ -34,6 +40,10 @@ def _du_bytes(path: Path) -> int:
     return total
 
 
+# ------------------------------
+# Public functions
+# ------------------------------
+
 def retrieve_preview(
     *,
     question: str,
@@ -42,7 +52,12 @@ def retrieve_preview(
     hybrid: bool = True,
 ) -> List[Dict[str, object]]:
     """
-    Returns a list of retrieved items with provenance, snippets, and scores — no generation.
+    Run retrieval only (no generation).
+    Returns a list of items with:
+    - provenance
+    - snippet of text
+    - fused/vector/BM25 scores
+    - metadata
     """
     cfg = load_config()
     vec_store = ChromaVectorStore.from_config()
@@ -67,7 +82,7 @@ def retrieve_preview(
         hybrid=bool(hybrid),
     )
 
-    # Build provenance list in the same order
+    # Format provenance for preview
     _ctx_text, prov = format_context_blocks(results, max_total_chars=None)
     preview = []
     for i, r in enumerate(results):
@@ -93,7 +108,12 @@ def retrieve_preview(
 
 def index_stats() -> Dict[str, object]:
     """
-    Quick index health: vector count and disk usage.
+    Report index health.
+    Returns:
+    - vector count
+    - disk usage for Chroma and BM25
+    - collection name
+    - embedding model
     """
     cfg = load_config()
     vec = ChromaVectorStore.from_config()
@@ -101,7 +121,7 @@ def index_stats() -> Dict[str, object]:
     try:
         chroma_count = vec.count()
     except Exception:
-        chroma_count = -1  # signal unknown
+        chroma_count = -1  # unknown / error
 
     chroma_dir = cfg.chroma_persist_directory
     bm25_dir = Path("./indexes/bm25")
