@@ -1,5 +1,6 @@
 # Core RAG stack
 chromadb-client==0.6.3
+chromadb>=0.4.22,<0.6
 rank-bm25>=0.2.2,<0.3
 numpy>=1.24,<2.0
 
