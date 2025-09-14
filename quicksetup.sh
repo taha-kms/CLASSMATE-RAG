@@ -57,6 +57,6 @@ else
   echo "NOTE: Docker not installed. Skipping Docker startup."
 fi
 
-echo "✅ Setup complete."
+echo "Setup complete."
 echo "To activate the venv: source ${VENV_DIR}/bin/activate"
 echo "Then run: rag --help"
