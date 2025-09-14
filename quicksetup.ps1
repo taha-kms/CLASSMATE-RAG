@@ -54,6 +54,6 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     Write-Host "NOTE: Docker not installed. Skipping Docker startup."
 }
 
-Write-Host "✅ Setup complete."
+Write-Host "Setup complete."
 Write-Host "To activate the venv in future sessions: .\$VENV_DIR\Scripts\Activate.ps1"
 Write-Host "Then run: rag --help"

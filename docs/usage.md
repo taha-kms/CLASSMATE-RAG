@@ -22,7 +22,7 @@ This shows all available commands and options.
 Before asking questions, you need to ingest documents into the vector database.
 
 ```bash
-rag ingest path/to/file.pdf --course "Math101" --unit "1" --language "en"
+rag add path/to/file.pdf --course "Math101" --unit "1" --language "en"
 ```
 
 Options you can use during ingestion:
@@ -36,7 +36,7 @@ Options you can use during ingestion:
 You can ingest multiple files at once:
 
 ```bash
-rag ingest data/*.pdf --course "CS50" --language "en"
+rag add data/*.pdf --course "CS50" --language "en"
 ```
 
 ---

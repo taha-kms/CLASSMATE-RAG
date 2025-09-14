@@ -81,7 +81,7 @@ Shows snippets, provenance, and scores.
 Export all chunks to a JSONL file:
 
 ```bash
-rag backup backup.jsonl
+rag dump --path backup.jsonl
 ```
 
 You can include checksums for integrity.
@@ -113,7 +113,7 @@ rag vacuum
 Recompute embeddings with a new model:
 
 ```bash
-rag rebuild-embeddings intfloat/multilingual-e5-large
+rag rebuild --model intfloat/multilingual-e5-large
 ```
 
 This will keep BM25 intact but update the Chroma store.
