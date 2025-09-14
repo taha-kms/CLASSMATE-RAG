@@ -57,32 +57,32 @@ rag ask "Explain Newton's second law" --course "Physics101" --unit "2"
 
 ---
 
-## 4. Admin Commands
+## 4. Maintenance Commands
 
-For maintenance and debugging, there are admin commands.
+For maintenance and debugging, use these commands.
 
 ### Show Index Stats
 
 ```bash
-rag admin stats
+rag stats
 ```
 
 ### Preview Retrieval (no generation)
 
 ```bash
-rag admin preview "What is machine learning?"
+rag preview "What is machine learning?"
 ```
 
 ### Backup Index
 
 ```bash
-rag admin backup backup.jsonl
+rag backup backup.jsonl
 ```
 
 ### Restore from Backup
 
 ```bash
-rag admin restore backup.jsonl
+rag restore backup.jsonl
 ```
 
 ---
@@ -92,19 +92,19 @@ rag admin restore backup.jsonl
 ### List Entries
 
 ```bash
-rag admin list --course "Math101"
+rag list --course "Math101"
 ```
 
 ### Delete by ID
 
 ```bash
-rag admin delete <chunk_id>
+rag delete <chunk_id>
 ```
 
 ### Reingest Files
 
 ```bash
-rag admin reingest path/to/file.pdf
+rag reingest path/to/file.pdf
 ```
 
 ---

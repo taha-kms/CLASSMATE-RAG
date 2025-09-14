@@ -114,9 +114,9 @@ Two complementary indexes:
 
 ---
 
-## 3. Admin Tools
+## 3. Maintenance Tools
 
-The `rag admin` commands allow inspection and maintenance.
+The `rag ` commands allow inspection and maintenance.
 
 - **Stats**: Show vector count and disk usage.  
 - **Preview**: See retrieval results without generation.  

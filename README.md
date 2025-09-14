@@ -7,7 +7,7 @@ It ingests documents (PDF, DOCX, PPTX, EPUB, HTML, CSV, TXT, MD), indexes them i
 
 ## ✨ Features
 
-* **CLI-first workflow** (`classmate` command)
+* **CLI-first workflow** (`rag` command)
 * Ingestion with metadata (course, unit, tags, language, semester, author)
 * **Hybrid retrieval** (BM25 keyword + vector embeddings, fused with RRF)
 * **Cited answers** generated with local LLMs
@@ -62,7 +62,7 @@ See [docs/usage.md](docs/usage.md) for more.
 
 ---
 
-## 🛠️ Admin & Maintenance
+## 🛠️ Maintenance
 
 * Show stats: `rag stats`
 * Backup: `rag dump --path dumps/corpus.jsonl`

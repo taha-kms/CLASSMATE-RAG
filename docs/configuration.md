@@ -1,10 +1,6 @@
-Perfect ✅
-Here’s a **`docs/configuration.md`** that explains environment/configuration settings **and** ties in the **admin commands** for managing indexes.
-
-````markdown
 # Configuration Guide
 
-This document explains how to configure the RAG system and use admin commands
+This document explains how to configure the RAG system and use Maintenance commands
 for maintaining the indexes.
 
 ---
@@ -48,16 +44,16 @@ Both are used together in **hybrid retrieval**.
 
 ---
 
-## 3. Admin Commands
+## 3. Maintenance Commands
 
-The `rag admin` subcommands help you **inspect, backup, restore, and clean** your indexes.
+The `rag ` subcommands help you **inspect, backup, restore, and clean** your indexes.
 
 ### Show Index Stats
 
 Check how many vectors are stored and disk usage:
 
 ```bash
-rag admin stats
+rag stats
 ```
 
 Output includes:
@@ -73,7 +69,7 @@ Output includes:
 See what would be retrieved (without LLM generation):
 
 ```bash
-rag admin preview "What is the chain rule in calculus?"
+rag preview "What is the chain rule in calculus?"
 ```
 
 Shows snippets, provenance, and scores.
@@ -85,7 +81,7 @@ Shows snippets, provenance, and scores.
 Export all chunks to a JSONL file:
 
 ```bash
-rag admin backup backup.jsonl
+rag backup backup.jsonl
 ```
 
 You can include checksums for integrity.
@@ -97,7 +93,7 @@ You can include checksums for integrity.
 Load chunks back into BM25 and Chroma:
 
 ```bash
-rag admin restore backup.jsonl
+rag restore backup.jsonl
 ```
 
 ---
@@ -107,7 +103,7 @@ rag admin restore backup.jsonl
 Compact and save the indexes:
 
 ```bash
-rag admin vacuum
+rag vacuum
 ```
 
 ---
@@ -117,7 +113,7 @@ rag admin vacuum
 Recompute embeddings with a new model:
 
 ```bash
-rag admin rebuild-embeddings intfloat/multilingual-e5-large
+rag rebuild-embeddings intfloat/multilingual-e5-large
 ```
 
 This will keep BM25 intact but update the Chroma store.
@@ -129,25 +125,25 @@ This will keep BM25 intact but update the Chroma store.
 #### List Entries
 
 ```bash
-rag admin list --course "Math101"
+rag list --course "Math101"
 ```
 
 #### Delete by ID
 
 ```bash
-rag admin delete <chunk_id>
+rag delete <chunk_id>
 ```
 
 #### Reingest Files
 
 ```bash
-rag admin reingest path/to/file.pdf
+rag reingest path/to/file.pdf
 ```
 
 #### List Source Paths
 
 ```bash
-rag admin sources
+rag sources
 ```
 
 ---
