@@ -24,8 +24,8 @@ Optional (but recommended):
 ## 2. Clone the Repository
 
 ```bash
-git clone https://github.com/your-org/your-repo.git
-cd your-repo
+git clone https://github.com/taha-kms/CLASSMATE-RAG.git
+cd CLASSMATE-RAG
 ```
 
 ---

@@ -98,7 +98,6 @@ rag/           # Core RAG system
   retrieval/   # BM25, Chroma, hybrid fusion
   pipeline/    # Ingestion, query orchestration
 docs/          # Documentation
-tests/         # Test suite
 tools/         # Benchmark scripts
 ```
 
