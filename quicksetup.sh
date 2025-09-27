@@ -22,7 +22,7 @@ fi
 source "${VENV_DIR}/bin/activate"
 
 echo "==> Upgrading pip..."
-python -m pip install --upgrade pip wheel
+python3 -m pip install --upgrade pip wheel
 
 if [ -f "${REQ_FILE}" ]; then
   echo "==> Installing dependencies..."
