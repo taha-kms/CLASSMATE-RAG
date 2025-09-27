@@ -651,8 +651,14 @@ def build_parser() -> argparse.ArgumentParser:
     pre.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pre.set_defaults(func=cmd_reingest)
 
-    return p
 
+    try:
+        for name, sp in sub.choices.items():  # type: ignore[attr-defined]
+            setattr(sp, "dest", name)
+    except Exception:
+        pass
+
+    return p
 
 def main(argv: Optional[list[str]] = None) -> int:
     """
