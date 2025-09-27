@@ -9,7 +9,7 @@ Includes:
 from __future__ import annotations
 
 from typing import List, Sequence, Tuple, Dict, Any
-
+from rag.utils.lang_detect import detect_lang_tag
 
 def format_context_blocks(
     retrieved: Sequence[Dict[str, Any]],
@@ -85,3 +85,24 @@ def build_general_messages(question: str) -> List[Dict[str, str]]:
     """
     sys = "You are a helpful assistant that answers general questions."
     return [{"role": "system", "content": sys}, {"role": "user", "content": question}]
+
+
+def choose_answer_language(
+    *,
+    question: str,
+    forced_language: str | None = None,
+    default_language: str = "auto",
+) -> str:
+    """
+    Decide the answer language.
+
+    Priority:
+      1) forced_language if 'en' or 'it'
+      2) default_language if 'en' or 'it'
+      3) detect from question (fallback to 'en')
+    """
+    if forced_language in {"en", "it"}:
+        return forced_language
+    if default_language in {"en", "it"}:
+        return default_language
+    return detect_lang_tag(question or "")
