@@ -49,7 +49,6 @@ from rag.generation import (
     build_general_messages,
     format_context_blocks,
 )
-from rag.generation.prompting import choose_answer_language
 from rag.generation.post import enforce_citations
 
 
@@ -471,11 +470,13 @@ def ask_question(
     forced_lang = None
     if filters.language and filters.language.value in ("en", "it"):
         forced_lang = filters.language.value
-    target_lang = choose_answer_language(
-        question=question,
-        forced_language=forced_lang,
-        default_language=str(cfg.default_language),
-    )
+
+    if forced_lang in ("en", "it"):
+        target_lang = forced_lang
+    else:
+        _dl = str(cfg.default_language)
+        target_lang = _dl if _dl in ("en", "it") else detect_lang_tag(question)
+
 
     # Build the grounded prompt (with compact, numbered context blocks)
     messages = build_grounded_messages(

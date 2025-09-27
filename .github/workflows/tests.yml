@@ -36,7 +36,7 @@ jobs:
         run: |
           pytest -q --cov --cov-report=term-missing
 
-      - name: Upload junit & coverage (optional)
+      - name: Upload junit & coverage
         if: always()
         run: |
           pytest --junitxml=test-results.xml
