@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - name: Checkout
@@ -30,19 +30,14 @@ jobs:
           if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
           python -m pip install pytest pytest-cov
 
-      - name: Run tests
+      - name: Run tests (with reports)
         env:
           PYTHONPATH: .
         run: |
-          pytest -q --cov --cov-report=term-missing
-
-      - name: Upload junit & coverage
-        if: always()
-        run: |
-          pytest --junitxml=test-results.xml
           mkdir -p artifacts
-          mv test-results.xml artifacts/
-        shell: bash
+          pytest -q --cov --cov-report=term-missing \
+            --junitxml=artifacts/test-results.xml \
+            --cov-report=xml:artifacts/coverage.xml
 
       - name: Store test artifacts
         if: always()
