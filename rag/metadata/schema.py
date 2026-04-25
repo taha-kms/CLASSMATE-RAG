@@ -73,6 +73,12 @@ class DocumentMetadata:
             d.pop("tags", None)
         if d.get("subject") is None:
             d.pop("subject", None)
+        # Sentinel values are not real metadata; stripping them here keeps
+        # downstream where-filters (Chroma / BM25) from narrowing on them.
+        if d.get("language") in ("auto", LanguageEnum.auto):
+            d.pop("language", None)
+        if d.get("doc_type") in ("other", DocTypeEnum.other):
+            d.pop("doc_type", None)
         return d
 
 
@@ -97,6 +103,10 @@ class ChunkMetadata:
             d.pop("tags", None)
         if d.get("subject") is None:
             d.pop("subject", None)
+        if d.get("language") in ("auto", LanguageEnum.auto):
+            d.pop("language", None)
+        if d.get("doc_type") in ("other", DocTypeEnum.other):
+            d.pop("doc_type", None)
         return d
 
 

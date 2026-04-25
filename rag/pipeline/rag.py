@@ -612,12 +612,17 @@ def ask_question(
         ).strip()
 
         # Fall back to a general (non-routed) answer if the model bailed out
-        # with "I don't know". Reuses the same loaded model, no swap.
+        # with "I don't know". Use a context-free system prompt — the route
+        # prompt forbids answering without context, so reusing it would just
+        # produce another "I don't know".
+        from_fallback = False
         if _looks_unknown(answer, target_lang):
-            general_msgs = [
-                {"role": "system", "content": system_prompt_for(decision.route, language=target_lang)},
-                {"role": "user", "content": question},
-            ]
+            general_msgs = build_general_messages(question)
+            if target_lang == "it":
+                general_msgs[0] = {
+                    "role": "system",
+                    "content": "Sei un assistente generico. Rispondi alla domanda dell'utente.",
+                }
             answer = loader.chat(
                 route=decision.route,
                 messages=general_msgs,
@@ -625,12 +630,15 @@ def ask_question(
                 temperature=float(os.getenv("ROUTE_TEMPERATURE", "0.2")),
                 top_p=float(os.getenv("ROUTE_TOP_P", "0.95")),
             ).strip()
+            from_fallback = True
 
         strict_flag = (
             bool(getattr(cfg, "strict_citations", False)) or
             str(os.getenv("STRICT_CITATIONS", "")).strip().lower() in {"1", "true", "yes"}
         )
-        if strict_flag:
+        # Skip citation enforcement when the answer came from the no-context
+        # fallback: the model never saw `prov`, so attaching it would be a lie.
+        if strict_flag and not from_fallback:
             add_sources = str(os.getenv("APPEND_SOURCES_BLOCK", "")).strip().lower() in {"1", "true", "yes"}
             answer = enforce_citations(
                 answer=answer,
@@ -644,7 +652,7 @@ def ask_question(
             answer=answer,
             language=target_lang,
             top_k=int(top_k),
-            sources=prov,
+            sources=[] if from_fallback else prov,
             retrieved=results,
             filters_applied=where,
             hybrid=bool(hybrid),
@@ -665,9 +673,11 @@ def ask_question(
     answer = runner.chat(messages).strip()
 
     # If the model essentially said “I don’t know”, fall back to a short general answer (no citations).
+    from_fallback = False
     if _looks_unknown(answer, target_lang):
         gm = build_general_messages(question)
         answer = runner.chat(gm).strip()
+        from_fallback = True
 
     # Translate-on-miss (if enabled in cfg/env) — but preserve [n]
     translate_flag = (
@@ -677,12 +687,13 @@ def ask_question(
     if translate_flag and _needs_translation(answer, target_lang):
         answer = _translate_text(answer, target_lang, runner=runner)
 
-    # Strict citation enforcement (post-process)
+    # Strict citation enforcement (post-process). Skip when the answer came
+    # from the no-context fallback: `prov` describes context the model never saw.
     strict_flag = (
         bool(getattr(cfg, "strict_citations", False)) or
         str(os.getenv("STRICT_CITATIONS", "")).strip().lower() in {"1", "true", "yes"}
     )
-    if strict_flag:
+    if strict_flag and not from_fallback:
         add_sources = str(os.getenv("APPEND_SOURCES_BLOCK", "")).strip().lower() in {"1", "true", "yes"}
         answer = enforce_citations(
             answer=answer,
@@ -696,7 +707,7 @@ def ask_question(
         answer=answer,
         language=target_lang,
         top_k=int(top_k),
-        sources=prov,
+        sources=[] if from_fallback else prov,
         retrieved=results,
         filters_applied=where,
         hybrid=bool(hybrid),
