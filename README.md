@@ -1,5 +1,12 @@
 # CLASSMATE-RAG
 
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c)](https://pytorch.org/)
+[![ChromaDB](https://img.shields.io/badge/ChromaDB-0.4%2B-brightgreen)](https://www.trychroma.com/)
+[![llama.cpp](https://img.shields.io/badge/llama.cpp--python-0.2%2B-orange)](https://github.com/abetlen/llama-cpp-python)
+[![tests](https://github.com/taha-kms/CLASSMATE-RAG/actions/workflows/tests.yml/badge.svg)](https://github.com/taha-kms/CLASSMATE-RAG/actions/workflows/tests.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 A **Retrieval-Augmented Generation (RAG)** system for course materials.
 It ingests documents (PDF, DOCX, PPTX, EPUB, HTML, CSV, TXT, MD), indexes them in **BM25** + **Chroma vector DB**, and answers questions with grounded citations using LLaMA/Mistral GGUF models.
 
