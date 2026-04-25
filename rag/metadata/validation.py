@@ -26,16 +26,25 @@ from typing import List, Optional, Dict, Any
 
 try:
     # Pydantic v1 (most common). If v2 is used, BaseModel import path is the same via shim.
-    from pydantic import BaseModel, validator, root_validator
+    import pydantic
+    from pydantic import BaseModel, validator, root_validator as _raw_root_validator
 except Exception as e:  # pragma: no cover
     raise ImportError(
         "pydantic is required for metadata validation. Please add 'pydantic>=1.10,<3' to requirements.txt"
     ) from e
 
 
+# On Pydantic v2 the v1-shim @root_validator (pre=False) refuses to load unless
+# skip_on_failure=True is passed. Provide a single decorator that works on both.
+_PYD_V2 = str(getattr(pydantic, "VERSION", "1")).startswith("2.")
+root_validator = (
+    _raw_root_validator(skip_on_failure=True) if _PYD_V2 else _raw_root_validator
+)
+
+
 # ---- helpers ----
 
-_DOC_TYPES = {"pdf", "docx", "pptx", "md", "txt", "html", "csv", "other"}
+_DOC_TYPES = {"pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"}
 _LANGS = {"en", "it", "auto"}
 
 _slug_re = re.compile(r"[^a-z0-9]+")

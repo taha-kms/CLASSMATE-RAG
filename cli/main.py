@@ -99,19 +99,12 @@ from pathlib import Path
 from typing import Optional, List
 
 # --- Internal imports: CLI <-> RAG system glue -------------------------------
+# Only lightweight, dependency-free modules are imported at module load. Heavier
+# ML/IO dependencies (rag.pipeline, rag.admin.*, rag.loaders) are imported lazily
+# inside command handlers so `build_parser` (and the test that calls it) can run
+# without sentence-transformers / torch / chromadb installed.
 from rag.metadata import normalize_cli_metadata, DocumentMetadata
 from rag.metadata.validation import validate_cli_metadata
-from rag.loaders import infer_doc_type_from_path
-from rag.pipeline import ingest_file, ask_question, retrieve_preview, index_stats
-from rag.admin.manage import (
-    list_entries,
-    show_entries_by_id,
-    resolve_ids,
-    delete_by_ids,
-    reingest_paths,
-    list_source_paths,
-)
-from rag.admin.backup import dump_index, restore_dump, vacuum_indexes, rebuild_embeddings
 
 
 # -----------------------------------------------------------------------------
@@ -123,6 +116,7 @@ def _detect_doc_type_from_ext(path: Path) -> str:
     Infer the document type (pdf/docx/pptx/html/csv/epub/md/txt/other) from the file path.
     This keeps doc type detection consistent with the loader layer.
     """
+    from rag.loaders import infer_doc_type_from_path
     return infer_doc_type_from_path(path)
 
 
@@ -183,6 +177,7 @@ def cmd_add(args: argparse.Namespace) -> int:
       - Chunks text and generates embeddings
       - Upserts into BOTH Chroma (vectors) and BM25 (lexical JSONL)
     """
+    from rag.pipeline import ingest_file
     path = Path(args.path)
     if not path.exists():
         print(f"ERROR: file not found: {path}", file=sys.stderr)
@@ -223,6 +218,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
     Run a hybrid retrieval + generation cycle for a natural language question.
     Filters narrow the corpus by metadata (course/unit/author/tags/etc.).
     """
+    from rag.pipeline import ask_question
     question = args.question.strip()
     if not question:
         print("ERROR: question cannot be empty", file=sys.stderr)
@@ -267,6 +263,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
       - fused score + per-store scores (vector distance / bm25 score)
     Useful for debugging retrieval quality and filters before asking.
     """
+    from rag.pipeline import retrieve_preview
     question = args.question.strip()
     if not question:
         print("ERROR: question cannot be empty", file=sys.stderr)
@@ -303,6 +300,7 @@ def cmd_stats(_args: argparse.Namespace) -> int:
     - vector_count: items in Chroma
     - disk_bytes: sizes for Chroma and BM25 persistence
     """
+    from rag.pipeline import index_stats
     try:
         s = index_stats()
     except Exception as e:
@@ -320,6 +318,7 @@ def cmd_dump(args: argparse.Namespace) -> int:
     Each line includes id, text, sanitized metadata, text_sha1 and (optionally)
     an embedding checksum for integrity checks across re-embeddings.
     """
+    from rag.admin.backup import dump_index
     include_emb = not bool(args.no_emb)
     try:
         n = dump_index(args.path, include_embedding_checksum=include_emb, batch_size=int(args.batch_size))
@@ -334,6 +333,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
     """
     Restore indexes from a JSONL dump (bulk upsert to Chroma + BM25).
     """
+    from rag.admin.backup import restore_dump
     try:
         n = restore_dump(args.path, batch_size=int(args.batch_size))
     except Exception as e:
@@ -349,6 +349,7 @@ def cmd_vacuum(_args: argparse.Namespace) -> int:
       - BM25: rewrite JSONL (compacts)
       - Chroma: compact/persist if supported by wrapper
     """
+    from rag.admin.backup import vacuum_indexes
     try:
         status = vacuum_indexes()
     except Exception as e:
@@ -363,6 +364,7 @@ def cmd_rebuild(args: argparse.Namespace) -> int:
     Re-embed *all* texts with a new embedding model; updates the vector store.
     BM25 text stays the same (optionally re-saved to refresh timestamps).
     """
+    from rag.admin.backup import rebuild_embeddings
     try:
         out = rebuild_embeddings(args.model, batch_size=int(args.batch_size))
     except Exception as e:
@@ -387,6 +389,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     List catalog entries with optional filters + paging.
     Output includes id, source_path, page, chunk_id, and a metadata summary.
     """
+    from rag.admin.manage import list_entries
     where = _filters_from_args(args)
     entries = list_entries(where=where, limit=args.limit, offset=args.offset)
     out = {
@@ -418,6 +421,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     Show detailed info for one or more chunk IDs, or all chunks from a source path.
     Useful to inspect actual snippet text and per-chunk metadata.
     """
+    from rag.admin.manage import show_entries_by_id, resolve_ids
     if not args.id and not args.path:
         print("ERROR: show requires --id or --path", file=sys.stderr)
         return 2
@@ -452,6 +456,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
       - [filters]        : by metadata (course/unit/tags/etc.)
     Use --dry-run to preview without deleting.
     """
+    from rag.admin.manage import resolve_ids, delete_by_ids
     # Resolve target IDs from (id | path | filters)
     ids: List[str] = []
     if args.id:
@@ -485,6 +490,11 @@ def cmd_reingest(args: argparse.Namespace) -> int:
     This is perfect for refreshing content with the SAME metadata (e.g., after changing
     chunk size or upgrading the embedder), but it won't introduce *new* metadata.
     """
+    from rag.admin.manage import (
+        show_entries_by_id,
+        list_source_paths,
+        reingest_paths,
+    )
     targets: List[str] = []
 
     if args.path:
@@ -650,13 +660,6 @@ def build_parser() -> argparse.ArgumentParser:
     pre.add_argument("--dry-run", action="store_true", help="Preview which files would be reingested")
     pre.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pre.set_defaults(func=cmd_reingest)
-
-
-    try:
-        for name, sp in sub.choices.items():  # type: ignore[attr-defined]
-            setattr(sp, "dest", name)
-    except Exception:
-        pass
 
     return p
 

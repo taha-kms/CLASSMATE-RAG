@@ -20,10 +20,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from rag.config import load_config
 from rag.metadata import DocumentMetadata
-from rag.pipeline import ingest_file
-from rag.retrieval import ChromaVectorStore, BM25Store
+# rag.pipeline and rag.retrieval pull torch / chromadb / sentence-transformers.
+# Imported lazily inside the functions that actually need them so that test-only
+# helpers like _matches_simple stay importable in a slim environment.
 
 
 # ------------------------------
@@ -183,6 +183,7 @@ def delete_by_ids(ids: Sequence[str]) -> Tuple[int, int]:
     if not ids:
         return (0, 0)
 
+    from rag.retrieval import ChromaVectorStore, BM25Store
     vec = ChromaVectorStore.from_config()
     n_vec = 0
     try:
@@ -208,6 +209,7 @@ def reingest_paths(paths: Sequence[str]) -> List[Dict[str, object]]:
     if not paths:
         return []
 
+    from rag.pipeline import ingest_file
     cat = _read_bm25_catalog()
     by_path = _group_by_source(cat)
 

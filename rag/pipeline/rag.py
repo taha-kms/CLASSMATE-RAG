@@ -569,7 +569,7 @@ def ask_question(
 
 
     # We also pre-compute the provenance list aligned with [n] blocks
-    _context_text, prov = format_context_blocks(results)
+    _context_text, prov = format_context_blocks(results, max_total_chars=3500)
 
     # ---- Routed path -----------------------------------------------------
     # When routing is enabled, the hybrid router picks a route from the
@@ -656,10 +656,8 @@ def ask_question(
     # Build the grounded prompt (with compact, numbered context blocks)
     messages = build_grounded_messages(
         question=question,
-        contexts=results,
-        forced_language=forced_lang,
-        default_language=str(cfg.default_language),
-        max_context_chars=3500,  # keep under llama.cpp context to avoid truncation
+        context_text=_context_text,
+        citations_required=True,
     )
 
     # Run local LLM
@@ -668,7 +666,7 @@ def ask_question(
 
     # If the model essentially said “I don’t know”, fall back to a short general answer (no citations).
     if _looks_unknown(answer, target_lang):
-        gm = build_general_messages(question=question, language=target_lang)
+        gm = build_general_messages(question)
         answer = runner.chat(gm).strip()
 
     # Translate-on-miss (if enabled in cfg/env) — but preserve [n]

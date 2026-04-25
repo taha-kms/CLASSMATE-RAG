@@ -1,29 +1,19 @@
 """
 Admin package public API.
 
-This package groups admin/observability helpers (previewing retrieval results,
-showing index stats, etc.). To give callers a clean import surface without
-diving into submodules, we re-export the two main entry points here:
-
-- retrieve_preview : Run retrieval only (no generation) and return ranked items
-                     with provenance/snippets/scores. Implemented in
-                     rag/admin/inspect.py.
-- index_stats      : Quick index health snapshot (vector count, disk usage).
-                     Implemented in rag/admin/inspect.py.
-
-Keeping these symbols at the package level allows convenient imports like:
-
-    from rag.admin import retrieve_preview, index_stats
+Re-exports `retrieve_preview` and `index_stats` from `rag.admin.inspect`, but
+loads them lazily so that importing lightweight siblings (e.g.
+`rag.admin.manage._matches_simple` from the unit tests) does not transitively
+pull the heavy ML/IO stack required by `inspect`.
 """
 
-# Re-export the concrete implementations from the local 'inspect' module.
-from .inspect import (
-    retrieve_preview,
-    index_stats,
-)
+from typing import Any
 
-# Explicitly declare the public API of this package to avoid leaking internals.
-__all__ = [
-    "retrieve_preview",
-    "index_stats",
-]
+__all__ = ["retrieve_preview", "index_stats"]
+
+
+def __getattr__(name: str) -> Any:
+    if name in __all__:
+        from .inspect import retrieve_preview, index_stats
+        return {"retrieve_preview": retrieve_preview, "index_stats": index_stats}[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -31,6 +31,7 @@ class DocTypeEnum(str, Enum):
     txt = "txt"
     html = "html"
     csv = "csv"
+    epub = "epub"
     other = "other"
 
 
@@ -148,6 +149,7 @@ def _normalize_doc_type(v: Optional[str]) -> DocTypeEnum:
         "html": DocTypeEnum.html,
         "htm": DocTypeEnum.html,
         "csv": DocTypeEnum.csv,
+        "epub": DocTypeEnum.epub,
     }
     return mapping.get(v, DocTypeEnum.other)
 
