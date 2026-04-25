@@ -48,6 +48,16 @@ def _getenv_bool(name: str, default: bool) -> bool:
     return str(val).strip().lower() in ("1", "true", "yes", "y", "on")
 
 
+def _getenv_float(name: str, default: float) -> float:
+    val = os.getenv(name)
+    if val is None or val == "":
+        return default
+    try:
+        return float(val)
+    except Exception:
+        return default
+
+
 @dataclass(frozen=True)
 class Config:
     # Embeddings
@@ -82,6 +92,45 @@ class Config:
 
     # Logging
     log_level: str = "INFO"
+
+    # ----------------------------------------------------------------
+    # Subject-aware routing (multi-model)
+    # ----------------------------------------------------------------
+    # Master toggle. When False, the pipeline uses the legacy single-model path.
+    enable_routing: bool = False
+
+    # Per-route GGUF paths. Empty strings disable that route (it falls back to
+    # the default route). Override via env: ROUTE_<NAME>_MODEL_PATH.
+    route_math_model_path: Path = Path(
+        "./models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf"
+    )
+    route_code_model_path: Path = Path(
+        "./models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+    )
+    route_translation_model_path: Path = Path(
+        "./models/salamandraTA-7B-instruct.Q4_K_M.gguf"
+    )
+    route_default_model_path: Path = Path(
+        "./models/Qwen3-8B-Q4_K_M.gguf"
+    )
+
+    # Per-route context window. 4096 keeps VRAM headroom on 8 GB cards.
+    route_n_ctx: int = 4096
+
+    # Sticky loader: how many GPU layers to push (0 = CPU; -1 = all).
+    route_n_gpu_layers: int = 0
+
+    # Hybrid resolution thresholds.
+    # Margin between top-1 and top-2 query scores below which the query is
+    # considered ambiguous and metadata is consulted.
+    route_query_margin: float = 0.10
+    # Minimum fraction of top-k retrieved chunks that must agree on a subject
+    # before metadata can override an ambiguous query.
+    route_metadata_threshold: float = 0.60
+
+    # Translation route extras: requires explicit translate-intent keyword on
+    # top of the prototype score (because SalamandraTA is translation-only).
+    route_translation_requires_intent: bool = True
 
     # --- Helpers / validations (explicitly called by runtime code) ---
 
@@ -139,6 +188,28 @@ def load_config(reload: bool = False) -> Config:
         enable_language_detection=_getenv_bool("ENABLE_LANGUAGE_DETECTION", True),
         default_language=_getenv_str("DEFAULT_LANGUAGE", "auto") or "auto",
         log_level=_getenv_str("LOG_LEVEL", "INFO") or "INFO",
+        enable_routing=_getenv_bool("ENABLE_ROUTING", False),
+        route_math_model_path=Path(
+            _getenv_str("ROUTE_MATH_MODEL_PATH", "./models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf")
+            or "./models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf"
+        ),
+        route_code_model_path=Path(
+            _getenv_str("ROUTE_CODE_MODEL_PATH", "./models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
+            or "./models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+        ),
+        route_translation_model_path=Path(
+            _getenv_str("ROUTE_TRANSLATION_MODEL_PATH", "./models/salamandraTA-7B-instruct.Q4_K_M.gguf")
+            or "./models/salamandraTA-7B-instruct.Q4_K_M.gguf"
+        ),
+        route_default_model_path=Path(
+            _getenv_str("ROUTE_DEFAULT_MODEL_PATH", "./models/Qwen3-8B-Q4_K_M.gguf")
+            or "./models/Qwen3-8B-Q4_K_M.gguf"
+        ),
+        route_n_ctx=_getenv_int("ROUTE_N_CTX", 4096),
+        route_n_gpu_layers=_getenv_int("ROUTE_N_GPU_LAYERS", 0),
+        route_query_margin=_getenv_float("ROUTE_QUERY_MARGIN", 0.10),
+        route_metadata_threshold=_getenv_float("ROUTE_METADATA_THRESHOLD", 0.60),
+        route_translation_requires_intent=_getenv_bool("ROUTE_TRANSLATION_REQUIRES_INTENT", True),
     )
 
     __CONFIG_SINGLETON = cfg

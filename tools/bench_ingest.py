@@ -18,7 +18,7 @@ from rag.metadata import normalize_cli_metadata, DocumentMetadata
 from rag.pipeline import ingest_file
 
 
-def run(paths: List[str], repeat: int = 1) -> None:
+def run(paths: List[str], repeat: int = 1, subject: str | None = None) -> None:
     files: List[Path] = []
     for p in paths:
         if any(ch in p for ch in "*?[]"):
@@ -30,7 +30,11 @@ def run(paths: List[str], repeat: int = 1) -> None:
         print("No files found.")
         return
 
-    meta: DocumentMetadata = normalize_cli_metadata(language="auto", tags="bench")
+    # `subject` (when given) is normalized into doc_meta.subject; otherwise
+    # the pipeline uses folder-name hint or auto-classification.
+    meta: DocumentMetadata = normalize_cli_metadata(
+        language="auto", tags="bench", subject=subject,
+    )
     t0 = time.perf_counter()
     up = 0
     for _ in range(repeat):
@@ -46,9 +50,16 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("paths", nargs="+", help="Files or globs")
     ap.add_argument("--repeat", type=int, default=1, help="Repeat count")
+    ap.add_argument(
+        "--subject",
+        type=str,
+        default=None,
+        help="Force routing subject for these files: math|code|translation|default. "
+             "If omitted, uses folder-name hint or auto-classification.",
+    )
     args = ap.parse_args(argv)
 
-    run(args.paths, repeat=int(args.repeat))
+    run(args.paths, repeat=int(args.repeat), subject=args.subject)
     return 0
 
 

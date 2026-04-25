@@ -50,6 +50,13 @@ from rag.generation import (
     format_context_blocks,
 )
 from rag.generation.post import enforce_citations
+from rag.routing import (
+    HybridRouter,
+    StickyModelLoader,
+    SubjectClassifier,
+    system_prompt_for,
+)
+from rag.routing.types import DEFAULT_ROUTE, ROUTES, Route, RouteDecision
 
 
 # =============================================================================
@@ -78,6 +85,68 @@ class AskResult:
     retrieved: List[Dict[str, object]]    # raw retrieved items (id, metadata, scores…)
     filters_applied: Dict[str, object]
     hybrid: bool
+    # Populated when routing is enabled; None on the legacy single-model path.
+    route: Optional[str] = None
+    route_reason: Optional[str] = None
+
+
+# =============================================================================
+# Routing singletons
+# =============================================================================
+# The classifier embeds prototype phrases once; reusing the instance avoids
+# repeating that work on every ingest/ask. The loader holds at most one
+# llama.cpp model resident across calls.
+_SUBJECT_CLASSIFIER: Optional[SubjectClassifier] = None
+_HYBRID_ROUTER: Optional[HybridRouter] = None
+_MODEL_LOADER: Optional[StickyModelLoader] = None
+
+
+def _get_subject_classifier(embedder: Optional[E5MultilingualEmbedder] = None) -> SubjectClassifier:
+    """Lazy singleton. Pass an embedder to share E5 with the ingest path."""
+    global _SUBJECT_CLASSIFIER
+    if _SUBJECT_CLASSIFIER is None:
+        _SUBJECT_CLASSIFIER = SubjectClassifier(embedder=embedder)
+    return _SUBJECT_CLASSIFIER
+
+
+def _get_hybrid_router() -> HybridRouter:
+    global _HYBRID_ROUTER
+    if _HYBRID_ROUTER is None:
+        cfg = load_config()
+        _HYBRID_ROUTER = HybridRouter(
+            classifier=_get_subject_classifier(),
+            query_margin=float(cfg.route_query_margin),
+            metadata_threshold=float(cfg.route_metadata_threshold),
+            translation_requires_intent=bool(cfg.route_translation_requires_intent),
+        )
+    return _HYBRID_ROUTER
+
+
+def _get_model_loader() -> StickyModelLoader:
+    global _MODEL_LOADER
+    if _MODEL_LOADER is None:
+        _MODEL_LOADER = StickyModelLoader()
+    return _MODEL_LOADER
+
+
+def _folder_subject_hint(p: Path) -> Optional[str]:
+    """
+    Map the parent folder name to a canonical route, when it matches a known
+    alias (math/code/translation/default + a few synonyms). Returns None for
+    unrecognized folder names — caller can then auto-classify.
+    """
+    name = (p.parent.name or "").strip().lower()
+    if not name:
+        return None
+    aliases = {
+        "math": "math", "mathematics": "math", "matematica": "math",
+        "code": "code", "coding": "code", "programming": "code",
+        "informatica": "code", "cs": "code",
+        "translation": "translation", "translate": "translation",
+        "traduzione": "translation", "lang": "translation",
+        "default": "default", "general": "default", "other": "default",
+    }
+    return aliases.get(name)
 
 
 # =============================================================================
@@ -135,7 +204,8 @@ def _sanitize_metadata(meta: Dict[str, object]) -> Dict[str, object]:
     # Whitelist core fields (others are ignored or stringified)
     for k in (
         "course", "unit", "language", "doc_type", "author",
-        "semester", "source_path", "created_at", "page", "chunk_id"
+        "semester", "source_path", "created_at", "page", "chunk_id",
+        "subject",
     ):
         v = meta.get(k)
         if v is None:
@@ -266,6 +336,24 @@ def ingest_file(
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create("./indexes/bm25")
 
+    # ---- Subject resolution (routing) -------------------------------------
+    # Priority: explicit doc_meta.subject > folder hint > auto-classify (only
+    # when routing is enabled). When routing is disabled we still accept an
+    # explicit subject so future re-ingests aren't lossy, but we don't pay
+    # for auto-classification.
+    resolved_subject: Optional[str] = None
+    if doc_meta.subject:
+        resolved_subject = doc_meta.subject
+    else:
+        hint = _folder_subject_hint(p)
+        if hint:
+            resolved_subject = hint
+        elif cfg.enable_routing:
+            classifier = _get_subject_classifier(embedder=base_embedder)
+            sample_texts = [t for (_pg, _cid, t) in chunks]
+            cls = classifier.classify_chunks(sample_texts)
+            resolved_subject = cls.subject
+
     # Language policy: chunk-level detection when metadata requests "auto"
     base_lang = doc_meta.language.value if doc_meta.language else "auto"
 
@@ -290,6 +378,7 @@ def ingest_file(
             "page": int(page),
             "chunk_id": int(chunk_id),
             "created_at": created_at,
+            "subject": resolved_subject,
         }
         meta = _sanitize_metadata(raw_meta)
 
@@ -425,6 +514,7 @@ def ask_question(
     filters: DocumentMetadata,
     top_k: int = 8,
     hybrid: bool = True,
+    forced_subject: Optional[str] = None,
 ) -> AskResult:
     """
     Full RAG query path:
@@ -478,6 +568,91 @@ def ask_question(
         target_lang = _dl if _dl in ("en", "it") else detect_lang_tag(question)
 
 
+    # We also pre-compute the provenance list aligned with [n] blocks
+    _context_text, prov = format_context_blocks(results)
+
+    # ---- Routed path -----------------------------------------------------
+    # When routing is enabled, the hybrid router picks a route from the
+    # query + retrieved-chunk metadata, the sticky loader serves the
+    # matching GGUF, and we use route-specific system prompts. The legacy
+    # single-runner path below is kept untouched for cfg.enable_routing=False.
+    if cfg.enable_routing:
+        forced_route: Optional[Route] = None
+        candidate = forced_subject or (filters.subject if hasattr(filters, "subject") else None)
+        if isinstance(candidate, str) and candidate in ROUTES:
+            forced_route = candidate  # type: ignore[assignment]
+
+        retrieved_metas = [r.get("metadata") or {} for r in results]
+        decision: RouteDecision = _get_hybrid_router().decide(
+            question,
+            retrieved_metas=retrieved_metas,
+            forced_subject=forced_route,
+        )
+
+        # Build route-aware messages: route-specific system prompt + the
+        # standard numbered-context user message.
+        sys_prompt = system_prompt_for(decision.route, language=target_lang)
+        user_msg = (
+            f"Context:\n{_context_text}\n\n"
+            f"Question:\n{question}\n\n"
+            f"Answer:"
+        )
+        messages = [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user_msg},
+        ]
+
+        loader = _get_model_loader()
+        answer = loader.chat(
+            route=decision.route,
+            messages=messages,
+            max_tokens=int(os.getenv("ROUTE_MAX_TOKENS", "768")),
+            temperature=float(os.getenv("ROUTE_TEMPERATURE", "0.2")),
+            top_p=float(os.getenv("ROUTE_TOP_P", "0.95")),
+        ).strip()
+
+        # Fall back to a general (non-routed) answer if the model bailed out
+        # with "I don't know". Reuses the same loaded model, no swap.
+        if _looks_unknown(answer, target_lang):
+            general_msgs = [
+                {"role": "system", "content": system_prompt_for(decision.route, language=target_lang)},
+                {"role": "user", "content": question},
+            ]
+            answer = loader.chat(
+                route=decision.route,
+                messages=general_msgs,
+                max_tokens=int(os.getenv("ROUTE_MAX_TOKENS", "768")),
+                temperature=float(os.getenv("ROUTE_TEMPERATURE", "0.2")),
+                top_p=float(os.getenv("ROUTE_TOP_P", "0.95")),
+            ).strip()
+
+        strict_flag = (
+            bool(getattr(cfg, "strict_citations", False)) or
+            str(os.getenv("STRICT_CITATIONS", "")).strip().lower() in {"1", "true", "yes"}
+        )
+        if strict_flag:
+            add_sources = str(os.getenv("APPEND_SOURCES_BLOCK", "")).strip().lower() in {"1", "true", "yes"}
+            answer = enforce_citations(
+                answer=answer,
+                provenance=prov,
+                add_sources_block=add_sources,
+                sources_title="Sources" if target_lang == "en" else "Fonti",
+            )
+
+        return AskResult(
+            question=question,
+            answer=answer,
+            language=target_lang,
+            top_k=int(top_k),
+            sources=prov,
+            retrieved=results,
+            filters_applied=where,
+            hybrid=bool(hybrid),
+            route=decision.route,
+            route_reason=decision.reason,
+        )
+
+    # ---- Legacy single-model path (routing disabled) ---------------------
     # Build the grounded prompt (with compact, numbered context blocks)
     messages = build_grounded_messages(
         question=question,
@@ -486,9 +661,6 @@ def ask_question(
         default_language=str(cfg.default_language),
         max_context_chars=3500,  # keep under llama.cpp context to avoid truncation
     )
-
-    # We also pre-compute the provenance list aligned with [n] blocks
-    _context_text, prov = format_context_blocks(results)
 
     # Run local LLM
     runner = LlamaCppRunner()

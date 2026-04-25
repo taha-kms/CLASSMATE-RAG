@@ -47,6 +47,7 @@ METADATA_FIELDS: Tuple[str, ...] = (
     "page",
     "chunk_id",
     "created_at",
+    "subject",
 )
 
 
@@ -61,11 +62,16 @@ class DocumentMetadata:
     tags: Optional[List[str]] = None
     source_path: Optional[str] = None
     created_at: Optional[str] = None
+    # Routing subject ("math" | "code" | "translation" | "default" | None).
+    # None lets the ingest pipeline auto-classify.
+    subject: Optional[str] = None
 
     def to_dict(self) -> Dict:
         d = asdict(self)
         if d.get("tags") is None:
             d.pop("tags", None)
+        if d.get("subject") is None:
+            d.pop("subject", None)
         return d
 
 
@@ -82,11 +88,14 @@ class ChunkMetadata:
     page: Optional[int] = None
     chunk_id: Optional[int] = None
     created_at: Optional[str] = None
+    subject: Optional[str] = None
 
     def to_dict(self) -> Dict:
         d = asdict(self)
         if d.get("tags") is None:
             d.pop("tags", None)
+        if d.get("subject") is None:
+            d.pop("subject", None)
         return d
 
 
@@ -143,6 +152,36 @@ def _normalize_doc_type(v: Optional[str]) -> DocTypeEnum:
     return mapping.get(v, DocTypeEnum.other)
 
 
+def _normalize_subject(v: Optional[str]) -> Optional[str]:
+    """
+    Normalize a routing subject string. Accepts the four canonical routes plus
+    a few common aliases. Returns None if input is empty/unknown — caller can
+    then fall back to auto-classification.
+    """
+    if not v:
+        return None
+    s = v.strip().lower()
+    if not s:
+        return None
+    aliases = {
+        "math": "math",
+        "mathematics": "math",
+        "matematica": "math",
+        "code": "code",
+        "coding": "code",
+        "programming": "code",
+        "informatica": "code",
+        "translation": "translation",
+        "translate": "translation",
+        "traduzione": "translation",
+        "language": "translation",
+        "default": "default",
+        "general": "default",
+        "other": "default",
+    }
+    return aliases.get(s)
+
+
 def normalize_cli_metadata(
     *,
     course: Optional[str] = None,
@@ -152,12 +191,14 @@ def normalize_cli_metadata(
     author: Optional[str] = None,
     semester: Optional[str] = None,
     tags: Optional[str | List[str]] = None,
+    subject: Optional[str] = None,
 ) -> DocumentMetadata:
     """
     Normalize CLI-provided metadata for 'add' (ingest) or 'ask' (filters).
     - trims strings
     - normalizes enums
     - parses tag list
+    - normalizes subject for routing (math|code|translation|default)
     """
     lang_enum = _normalize_language(language)
     dt_enum = _normalize_doc_type(doc_type)
@@ -182,5 +223,6 @@ def normalize_cli_metadata(
         tags=tag_list or None,
         source_path=None,
         created_at=None,
+        subject=_normalize_subject(subject),
     )
     return meta
