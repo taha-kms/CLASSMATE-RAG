@@ -29,9 +29,12 @@ Options you can use during ingestion:
 
 * `--course`: course name or ID
 * `--unit`: unit/chapter identifier
-* `--language`: document language
-* `--doc-type`: type of document (slides, notes, book, etc.)
+* `--language`: document language (`en`, `it`, or `auto` to detect per chunk)
+* `--doc-type`: one of `pdf`, `docx`, `pptx`, `md`, `txt`, `html`, `csv`, `epub`, `other` (inferred from file extension by default)
+* `--author`: author or source
+* `--semester`: semester label (e.g., `2025S`)
 * `--tags`: comma-separated tags
+* `--fixup`: trim/slugify field values automatically
 
 You can ingest multiple files at once:
 

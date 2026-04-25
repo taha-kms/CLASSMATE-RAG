@@ -85,20 +85,34 @@ Details in [docs/configuration.md](docs/configuration.md).
 
 ---
 
+## 📝 License
+
+Copyright (C) 2026 Taha Kamalisadeghian &lt;tahakamali14@gmail.com&gt;
+
+CLASSMATE-RAG is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License v3.0** as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but **WITHOUT ANY WARRANTY**; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the [LICENSE](LICENSE) file for the full text, or visit &lt;https://www.gnu.org/licenses/gpl-3.0.html&gt;.
+
+---
+
 ## 🧩 Project Structure
 
 ```
-cli/           # CLI entrypoint
-rag/           # Core RAG system
-  admin/       # Backup, restore, manage, inspect
-  chunking/    # Text splitting into chunks
-  embeddings/  # Embedding models & cache
-  generation/  # LLM runner, prompting, postprocessing
-  loaders/     # File loaders
-  retrieval/   # BM25, Chroma, hybrid fusion
-  pipeline/    # Ingestion, query orchestration
-docs/          # Documentation
-tools/         # Benchmark scripts
+cli/             # CLI entrypoint (argparse)
+rag/             # Core RAG system
+  admin/         # Backup, restore, manage, inspect
+  chunking/      # Sentence-aware text splitting
+  embeddings/    # E5 embedder + on-disk cache
+  generation/    # llama.cpp runner, prompting, citation post-processing
+  loaders/       # File loaders (PDF, DOCX, PPTX, EPUB, HTML, CSV, TXT, MD)
+  metadata/      # DocumentMetadata schema + Pydantic CLI validation
+  pipeline/      # Ingestion + ask orchestration
+  retrieval/     # BM25, Chroma vector store, RRF hybrid fusion, neighbor expansion
+  routing/       # Hybrid subject router (math/code/translation/default) + sticky model loader
+  utils/         # Language detection, near-duplicate filtering, stable IDs
+  config.py      # Env/.env-driven configuration
+  model_fetch.py # On-demand GGUF download from HF
+docs/            # Documentation
+tests/           # pytest suite
+tools/           # Benchmark / helper scripts
 ```
 
 ---
