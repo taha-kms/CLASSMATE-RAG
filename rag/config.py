@@ -23,6 +23,34 @@ from typing import List, Optional
 
 from dotenv import load_dotenv
 
+def _project_root() -> Path:
+    """
+    Directory that relative data paths resolve against.
+
+    Walks up from this file looking for pyproject.toml, which is what a source
+    checkout or an editable install looks like. Falls back to the working
+    directory when the package lives in site-packages, where writing indexes
+    next to the installed code would be wrong.
+
+    Without this, "./indexes/bm25" was interpreted relative to wherever the
+    process happened to start, so running the CLI from another directory
+    silently created a second, empty index instead of finding the real one.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / "pyproject.toml").is_file():
+            return parent
+    return Path.cwd()
+
+
+def resolve_data_path(value: str | Path) -> Path:
+    """Resolve a possibly-relative data path against the project root."""
+    p = Path(value).expanduser()
+    if p.is_absolute():
+        return p
+    return (_project_root() / p).resolve()
+
+
 def _getenv_str(name: str, default: Optional[str] = None) -> Optional[str]:
     val = os.getenv(name)
     if val is None or val == "":
@@ -74,6 +102,11 @@ class Config:
     # Chroma
     chroma_persist_directory: Path = Path("./indexes/chroma")
     chroma_collection_name: str = "classmate_rag"
+
+    # Lexical index and embedding cache. Resolved against the project root
+    # so the CLI finds the same corpus from any working directory.
+    bm25_directory: Path = Path("./indexes/bm25")
+    emb_cache_directory: Path = Path("./indexes/emb_cache")
 
     # Chunking / retrieval
     chunk_size: int = 1000
@@ -176,7 +209,9 @@ def load_config(reload: bool = False) -> Config:
         or _getenv_str("CLASSMATE_RAG_HF_TOKEN"),
         llm_repo_id=_getenv_str("LLM_REPO_ID"),
         llm_filename=_getenv_str("LLM_FILENAME"),
-        chroma_persist_directory=Path(_getenv_str("CHROMA_PERSIST_DIRECTORY", "./indexes/chroma") or "./indexes/chroma"),
+        chroma_persist_directory=resolve_data_path(_getenv_str("CHROMA_PERSIST_DIRECTORY", "./indexes/chroma") or "./indexes/chroma"),
+        bm25_directory=resolve_data_path(_getenv_str("BM25_DIRECTORY", "./indexes/bm25") or "./indexes/bm25"),
+        emb_cache_directory=resolve_data_path(_getenv_str("EMB_CACHE_DIR", "./indexes/emb_cache") or "./indexes/emb_cache"),
         chroma_collection_name=_getenv_str("CHROMA_COLLECTION_NAME", "classmate_rag") or "classmate_rag",
         chunk_size=_getenv_int("CHUNK_SIZE", 1000),
         chunk_overlap=_getenv_int("CHUNK_OVERLAP", 150),

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
+from rag.config import load_config
 
 
 # ------------------------------
@@ -46,7 +47,7 @@ class CachingEmbedder:
 
     def __init__(self, base, cache_dir: Optional[str] = None) -> None:
         self.base = base
-        root = cache_dir or os.getenv("EMB_CACHE_DIR") or "./indexes/emb_cache"
+        root = cache_dir or load_config().emb_cache_directory
         self.root = Path(root).expanduser().resolve()
         self.root.mkdir(parents=True, exist_ok=True)
 

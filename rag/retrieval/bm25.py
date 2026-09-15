@@ -9,7 +9,8 @@ BM25 lexical retrieval with English/Italian tokenization and metadata filters.
     * basic punctuation stripping
     * stopwords for EN/IT
 - Metadata filters: equality on simple fields and tag inclusion.
-- On-disk persistence (tokens+metadata+text) to ./indexes/bm25/bm25_index.jsonl by default.
+- On-disk persistence (tokens+metadata+text) to the configured BM25 directory,
+  which defaults to <project root>/indexes/bm25.
 
 NOTE: We rebuild the BM25 structure when the corpus changes (simple & robust for classroom scale).
 """
@@ -25,6 +26,7 @@ from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional,
 from rank_bm25 import BM25Okapi
 
 from rag.utils.lang_detect import detect_lang_tag
+from rag.config import load_config
 
 # ---------------------------
 # Tokenization & stopwords
@@ -138,7 +140,7 @@ class BM25Store:
       {"id": "...", "text": "...", "tokens": [...], "metadata": {...}}
     We rebuild BM25Okapi from tokens on load.
     """
-    index_dir: Path = Path("./indexes/bm25")
+    index_dir: Path = field(default_factory=lambda: load_config().bm25_directory)
     index_file: str = "bm25_index.jsonl"
 
     _entries: Dict[str, _Entry] = field(default_factory=dict)     # id -> entry
@@ -264,7 +266,10 @@ class BM25Store:
     # ---------- Convenience ----------
 
     @classmethod
-    def load_or_create(cls, index_dir: str | Path = "./indexes/bm25") -> "BM25Store":
-        store = cls(index_dir=Path(index_dir))
+    def load_or_create(cls, index_dir: str | Path | None = None) -> "BM25Store":
+        # None means "use the configured directory", which resolves against
+        # the project root rather than the current working directory.
+        resolved = Path(index_dir) if index_dir is not None else load_config().bm25_directory
+        store = cls(index_dir=resolved)
         store.load()
         return store

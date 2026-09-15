@@ -37,11 +37,13 @@ def _sha1_text(s: str) -> str:
     """Return SHA1 hash of a UTF-8 encoded string."""
     return _sha1_bytes((s or "").encode("utf-8", "ignore"))
 
-def _iter_bm25_catalog(path: Path = Path("./indexes/bm25/bm25_index.jsonl")) -> Iterator[Tuple[str, str, Dict[str, object]]]:
+def _iter_bm25_catalog(path: Path | None = None) -> Iterator[Tuple[str, str, Dict[str, object]]]:
     """
     Yield all entries from the BM25 catalog.
     Each line contains (id, text, metadata).
     """
+    if path is None:
+        path = load_config().bm25_directory / "bm25_index.jsonl"
     if not path.exists():
         return
     with path.open("r", encoding="utf-8", errors="ignore") as f:
@@ -139,9 +141,9 @@ def restore_dump(
 
     cfg = load_config()
     base_embedder = E5MultilingualEmbedder(model_name=str(cfg.embedding_model_name))
-    embedder = CachingEmbedder(base_embedder, cache_dir="./indexes/emb_cache")
+    embedder = CachingEmbedder(base_embedder)
     vec_store = ChromaVectorStore.from_config()
-    bm25_store = BM25Store.load_or_create("./indexes/bm25")
+    bm25_store = BM25Store.load_or_create()
 
     lines = [ln for ln in p.read_text(encoding="utf-8", errors="ignore").splitlines() if ln.strip()]
     if not lines:
@@ -182,7 +184,7 @@ def vacuum_indexes() -> Dict[str, str]:
     - Chroma: compact or persist if supported.
     Returns a status dictionary.
     """
-    bm25_store = BM25Store.load_or_create("./indexes/bm25")
+    bm25_store = BM25Store.load_or_create()
     bm25_store.save()
 
     vec_store = ChromaVectorStore.from_config()
@@ -217,10 +219,10 @@ def rebuild_embeddings(
         return {"updated": 0, "model": new_model_name}
 
     vec_store = ChromaVectorStore.from_config()
-    bm25_store = BM25Store.load_or_create("./indexes/bm25")
+    bm25_store = BM25Store.load_or_create()
 
     base_embedder = E5MultilingualEmbedder(model_name=new_model_name)
-    embedder = CachingEmbedder(base_embedder, cache_dir="./indexes/emb_cache")
+    embedder = CachingEmbedder(base_embedder)
 
     updated = 0
     for batch in _batched(entries, batch_size):
