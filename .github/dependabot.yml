@@ -1,0 +1,58 @@
+version: 2
+
+updates:
+  # ---- Python -------------------------------------------------------------
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # CI can install and import these, so a green check on the bump means
+      # something. One PR rather than six.
+      testable:
+        patterns:
+          - "pytest*"
+          - "ruff"
+          - "pydantic*"
+          - "python-dotenv"
+          - "langdetect"
+          - "rank-bm25"
+          - "numpy"
+      # Document parsers. Not installed in CI, so a passing run says nothing
+      # about them; grouped so they arrive together for one manual check.
+      loaders:
+        patterns:
+          - "pypdf"
+          - "python-docx"
+          - "python-pptx"
+          - "beautifulsoup4"
+          - "lxml*"
+          - "markdown"
+          - "readability-lxml"
+          - "ebooklib"
+          - "pdf2image"
+          - "pytesseract"
+    ignore:
+      # The heavy runtime. CI cannot install or import any of it, so
+      # Dependabot's green check would be cosmetic, and a bad torch or
+      # llama-cpp bump breaks generation in ways only a real run catches.
+      # Upgrade these deliberately, not on a schedule.
+      - dependency-name: "torch"
+      - dependency-name: "llama-cpp-python"
+      - dependency-name: "sentence-transformers"
+      - dependency-name: "chromadb"
+      - dependency-name: "transformers"
+
+  # ---- GitHub Actions -----------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns:
+          - "*"
