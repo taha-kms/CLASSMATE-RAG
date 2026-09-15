@@ -1,0 +1,11 @@
+# CPU-only PyTorch.
+#
+# sentence-transformers depends on torch, and the default PyPI wheel is the
+# CUDA build: roughly 3 GB of nvidia libraries a machine without a usable
+# GPU will never load. Installing this file FIRST pins the CPU build, and
+# pip then leaves it alone when it resolves sentence-transformers.
+#
+#   pip install -r requirements-cpu.txt
+#   pip install -e .
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0

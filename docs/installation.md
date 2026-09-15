@@ -41,8 +41,42 @@ They will:
 * Copy `.env.example` to `.env` if missing
 * Start the Docker-based vector DB
 
-If you would rather not use the helper script, `pip install -e .` on its own is
-enough. Add `pip install -r requirements-test.txt` to run the test suite.
+If you would rather not use the helper script:
+
+```bash
+pip install -r requirements-cpu.txt   # or requirements-gpu.txt
+pip install -e .
+pip install -r requirements-test.txt  # only to run the tests
+```
+
+## Which PyTorch build
+
+`sentence-transformers` needs PyTorch, and the default wheel on PyPI is the
+CUDA one. On a machine that cannot use it, that is a large download that
+never gets loaded:
+
+| | installed size |
+| --- | --- |
+| CPU build | ~1.2 GB |
+| CUDA build plus nvidia libraries and triton | ~5.2 GB |
+
+The helper scripts pick automatically: the CUDA build when `nvidia-smi` is
+present, the CPU build otherwise. Override it if the guess is wrong:
+
+```bash
+CLASSMATE_TORCH=cpu ./quicksetup.sh
+```
+
+```powershell
+$env:CLASSMATE_TORCH = "cpu"; .\quicksetup.ps1
+```
+
+Having an NVIDIA card is not on its own a reason to take the CUDA build.
+What matters is whether it has enough VRAM for the model you plan to run: a
+7B Q4 GGUF needs roughly 4.4 GB to offload fully, so a 4 GB card cannot
+hold one. Order matters too, the torch build has to be installed before
+`pip install -e .`, or pip resolves sentence-transformers first and pulls
+the CUDA wheel anyway.
 
 ### Linux / macOS
 
