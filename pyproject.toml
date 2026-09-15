@@ -55,8 +55,19 @@ known-first-party = ["rag", "cli"]
 # Without an explicit source, coverage measures whatever got imported, which
 # includes the test files themselves. They are ~100% covered by definition,
 # so the reported total came out flattering and meaningless.
-source = ["rag", "cli"]
+# One root with omits, rather than source = ["rag", "cli"]. Two source roots
+# make coverage write bare filenames, so rag/__init__.py and cli/__init__.py
+# both come out as "__init__.py" and Sonar cannot tell them apart.
+source = ["."]
+omit = [
+    "tests/*",
+    "tools/*",
+    ".venv/*",
+    "*/__pycache__/*",
+    "setup.py",
+]
 branch = true
+relative_files = true
 
 [tool.coverage.report]
 show_missing = true
