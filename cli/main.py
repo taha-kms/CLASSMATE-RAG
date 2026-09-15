@@ -672,6 +672,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     """
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # Honour LOG_LEVEL before any handler runs, so model loads and index
+    # work are visible instead of silently discarded. Imported here to keep
+    # build_parser() importable without the config module's dependencies.
+    from rag.config import configure_logging
+    configure_logging()
+
     return args.func(args)
 
 

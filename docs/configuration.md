@@ -167,3 +167,19 @@ port, otherwise the app starts normally and then fails on the first query.
 
 `CHROMA_BIND_HOST` defaults to `127.0.0.1`. Chroma has no authentication in front
 of it, so only change this if you understand what you are exposing.
+
+## Logging
+
+`LOG_LEVEL` controls how much the CLI reports. Records go to stderr, so
+stdout stays parseable:
+
+```bash
+rag stats | jq           # JSON only
+LOG_LEVEL=DEBUG rag ask "..."   # progress on stderr
+```
+
+At `INFO`, the default, only this project's own messages appear, which is
+mostly model loads and evictions. Chatty third-party loggers (httpx,
+chromadb, transformers and friends) are held at `WARNING` so a single query
+does not produce a line per HTTP request. `DEBUG` lifts that and shows
+everything.
