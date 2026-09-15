@@ -60,3 +60,31 @@ def test_environment_overrides_reach_config(monkeypatch, env_name, attr, raw, ex
 def test_a_non_numeric_value_falls_back_instead_of_crashing(monkeypatch):
     monkeypatch.setenv("NEIGHBOR_RADIUS", "not-a-number")
     assert load_config(reload=True).neighbor_radius == 1
+
+
+def test_ingest_threads_zero_derives_from_the_cpu_count(monkeypatch):
+    monkeypatch.delenv("INGEST_THREADS", raising=False)
+    cfg = load_config(reload=True)
+    assert cfg.ingest_threads == 0
+    assert cfg.resolved_ingest_threads() >= 2
+
+
+def test_an_explicit_ingest_thread_count_is_used_verbatim(monkeypatch):
+    monkeypatch.setenv("INGEST_THREADS", "7")
+    assert load_config(reload=True).resolved_ingest_threads() == 7
+
+
+def test_generation_parameters_come_from_config(monkeypatch):
+    monkeypatch.setenv("ROUTE_MAX_TOKENS", "256")
+    monkeypatch.setenv("ROUTE_TEMPERATURE", "0.7")
+    monkeypatch.setenv("ROUTE_TOP_P", "0.8")
+    cfg = load_config(reload=True)
+    assert (cfg.route_max_tokens, cfg.route_temperature, cfg.route_top_p) == (256, 0.7, 0.8)
+
+
+def test_dedup_settings_come_from_config(monkeypatch):
+    monkeypatch.setenv("DEDUP_CHUNKS", "true")
+    monkeypatch.setenv("DEDUP_THRESHOLD", "0.75")
+    cfg = load_config(reload=True)
+    assert cfg.dedup_chunks is True
+    assert cfg.dedup_threshold == 0.75

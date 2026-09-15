@@ -21,7 +21,6 @@ Design notes
 
 from __future__ import annotations
 
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -328,11 +327,8 @@ def ingest_file(
     pages = load_document_by_type(p, doc_type, enable_ocr=bool(cfg.enable_ocr))
     total_pages = len(pages)
 
-    # Concurrent chunking (defaults scale with CPU cores)
-    max_workers_env = os.getenv("INGEST_THREADS")
-    max_workers = (
-        int(max_workers_env) if (max_workers_env and max_workers_env.isdigit()) else max(2, (os.cpu_count() or 4) // 2)
-    )
+    # Concurrent chunking (INGEST_THREADS, or half the CPU count)
+    max_workers = cfg.resolved_ingest_threads()
     chunks = _concurrent_chunk_pages(
         pages,
         chunk_size=int(cfg.chunk_size),
@@ -341,8 +337,8 @@ def ingest_file(
     )
 
     # Optional near-duplicate filtering (Jaccard on shingles, tuned by env)
-    dedup_on = str(os.getenv("DEDUP_CHUNKS", "")).strip().lower() in {"1", "true", "yes"}
-    dedup_thr = float(os.getenv("DEDUP_THRESHOLD", "0.92"))
+    dedup_on = bool(cfg.dedup_chunks)
+    dedup_thr = float(cfg.dedup_threshold)
     if dedup_on and chunks:
         blocks = [t for (_pg, _cid, t) in chunks]
         kept_blocks = dedup_text_blocks(blocks, jaccard_threshold=dedup_thr)
@@ -638,9 +634,9 @@ def ask_question(
         answer = loader.chat(
             route=decision.route,
             messages=messages,
-            max_tokens=int(os.getenv("ROUTE_MAX_TOKENS", "768")),
-            temperature=float(os.getenv("ROUTE_TEMPERATURE", "0.2")),
-            top_p=float(os.getenv("ROUTE_TOP_P", "0.95")),
+            max_tokens=int(cfg.route_max_tokens),
+            temperature=float(cfg.route_temperature),
+            top_p=float(cfg.route_top_p),
         ).strip()
 
         # Fall back to a general (non-routed) answer if the model bailed out
@@ -658,9 +654,9 @@ def ask_question(
             answer = loader.chat(
                 route=decision.route,
                 messages=general_msgs,
-                max_tokens=int(os.getenv("ROUTE_MAX_TOKENS", "768")),
-                temperature=float(os.getenv("ROUTE_TEMPERATURE", "0.2")),
-                top_p=float(os.getenv("ROUTE_TOP_P", "0.95")),
+                max_tokens=int(cfg.route_max_tokens),
+                temperature=float(cfg.route_temperature),
+                top_p=float(cfg.route_top_p),
             ).strip()
             from_fallback = True
 
