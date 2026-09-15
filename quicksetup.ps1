@@ -22,6 +22,31 @@ Write-Host "==> Activating virtual environment..."
 Write-Host "==> Upgrading pip..."
 python -m pip install --upgrade pip wheel
 
+# --- PyTorch build ------------------------------------------------------
+# sentence-transformers needs torch, and the default PyPI wheel is the CUDA
+# build: about 4 GB of nvidia libraries a machine without a usable GPU will
+# never load. Install the chosen build first so pip keeps it when it later
+# resolves sentence-transformers.
+#
+# Override with $env:CLASSMATE_TORCH = "cpu" or "gpu".
+$TorchChoice = $env:CLASSMATE_TORCH
+if (-not $TorchChoice) { $TorchChoice = "auto" }
+if ($TorchChoice -eq "auto") {
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+        $TorchChoice = "gpu"
+    } else {
+        $TorchChoice = "cpu"
+    }
+}
+
+$TorchReqs = "requirements-$TorchChoice.txt"
+if (Test-Path $TorchReqs) {
+    Write-Host "==> Installing PyTorch ($TorchChoice build)..."
+    pip install -r $TorchReqs
+} else {
+    Write-Warning "$TorchReqs not found. Letting pip pick a torch build."
+}
+
 if (Test-Path $PROJECT_FILE) {
     Write-Host "==> Installing CLASSMATE-RAG and its dependencies..."
     # Editable install also creates the `rag` console script declared in

@@ -1,0 +1,9 @@
+# CUDA PyTorch, the default PyPI wheel.
+#
+# Only worth installing if you have an NVIDIA card with enough VRAM to hold
+# the model you intend to run. A 7B Q4 GGUF needs about 4.4 GB to offload
+# fully, so a 4 GB card cannot take one whole (see docs/configuration.md).
+#
+#   pip install -r requirements-gpu.txt
+#   pip install -e .
+torch>=2.0.0
