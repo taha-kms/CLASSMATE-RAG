@@ -5,6 +5,10 @@ pytest
 pytest-cov
 
 # rank-bm25 is pure Python and only needs numpy, so the lexical retrieval
-# layer can be covered in CI without dragging in the ML stack.
+# layer can be covered in CI without dragging in the ML stack. python-dotenv
+# and langdetect come along because rag/retrieval/__init__.py reaches
+# rag.config and rag.utils.lang_detect on import. All four are small.
 numpy>=1.24,<2.0
 rank-bm25>=0.2.2,<0.3
+python-dotenv>=1.0,<2
+langdetect>=1.0.9,<1.1
