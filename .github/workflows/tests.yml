@@ -10,8 +10,8 @@ on:
 permissions:
   contents: read
 
-# A second push to the same branch cancels the first, instead of running the
-# whole three-version matrix twice and waiting for both.
+# A second push to the same branch cancels the first rather than running the
+# suite twice and waiting for both.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -19,11 +19,6 @@ concurrency:
 jobs:
   pytest:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +26,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
           cache: "pip"
 
       - name: Install dependencies
@@ -52,8 +47,6 @@ jobs:
             --cov-report=xml:artifacts/coverage.xml
 
       - name: Upload coverage to Codecov
-        # One upload is enough; the matrix runs the same suite three times.
-        if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -64,6 +57,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pytest-artifacts-${{ matrix.python-version }}
+          name: pytest-artifacts
           path: artifacts
           if-no-files-found: ignore

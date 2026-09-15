@@ -7,6 +7,8 @@ name = "classmate-rag"
 version = "0.1.0"
 description = "Retrieval-augmented generation over course materials, running locally"
 readme = "README.md"
+# CI verifies 3.12 only. 3.10 and 3.11 should work, and nothing in the
+# codebase needs anything newer, but they are not exercised on every push.
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "Taha Kamalisadeghian", email = "tahakamali14@gmail.com" }]
