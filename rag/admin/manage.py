@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from rag.metadata import DocumentMetadata
+from rag.config import load_config
 # rag.pipeline and rag.retrieval pull torch / chromadb / sentence-transformers.
 # Imported lazily inside the functions that actually need them so that test-only
 # helpers like _matches_simple stay importable in a slim environment.
@@ -30,7 +31,7 @@ from rag.metadata import DocumentMetadata
 # Constants
 # ------------------------------
 
-_BM25_DIR = Path("./indexes/bm25")
+_BM25_DIR = load_config().bm25_directory
 _BM25_JSONL = _BM25_DIR / "bm25_index.jsonl"
 
 

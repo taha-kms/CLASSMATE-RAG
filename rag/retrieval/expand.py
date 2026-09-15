@@ -19,8 +19,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from rag.utils import stable_chunk_id
+from rag.config import load_config
 
-_BM25_JSONL = Path("./indexes/bm25/bm25_index.jsonl")
+_BM25_JSONL = load_config().bm25_directory / "bm25_index.jsonl"
 
 
 @dataclass

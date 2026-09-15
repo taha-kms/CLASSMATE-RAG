@@ -24,6 +24,8 @@ cp .env.example .env
 | `CHROMA_HTTP_URL`          | Chroma server endpoint; unset uses embedded mode | `http://localhost:8000`           |
 | `CHROMA_BIND_HOST`         | Interface docker-compose publishes Chroma on     | `127.0.0.1`                       |
 | `CHROMA_HOST_PORT`         | Host port docker-compose publishes Chroma on     | `8000`                            |
+| `BM25_DIRECTORY`           | Where the BM25 lexical index lives               | `./indexes/bm25`                  |
+| `EMB_CACHE_DIR`            | Where cached embeddings are stored                | `./indexes/emb_cache`             |
 | `HF_TOKEN`                 | (optional) HuggingFace token for private models | `<your_token>`                    |
 | `LLAMA_MODEL_PATH`         | Path to local `.gguf` model file                | `./models/mistral-7b.Q4_K_M.gguf` |
 | `LLAMA_CONTEXT_SIZE`       | Context window size for the model               | `2048`                            |

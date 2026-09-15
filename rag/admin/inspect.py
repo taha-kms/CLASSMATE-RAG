@@ -61,7 +61,7 @@ def retrieve_preview(
     """
     cfg = load_config()
     vec_store = ChromaVectorStore.from_config()
-    bm25_store = BM25Store.load_or_create("./indexes/bm25")
+    bm25_store = BM25Store.load_or_create()
     embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
 
     retriever = HybridRetriever(
@@ -124,7 +124,7 @@ def index_stats() -> Dict[str, object]:
         chroma_count = -1  # unknown / error
 
     chroma_dir = cfg.chroma_persist_directory
-    bm25_dir = Path("./indexes/bm25")
+    bm25_dir = cfg.bm25_directory
 
     bm25_count = BM25Store.load_or_create(bm25_dir).count()
 

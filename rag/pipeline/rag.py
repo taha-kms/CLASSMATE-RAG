@@ -334,9 +334,9 @@ def ingest_file(
 
     # Components (embedder + caches + stores)
     base_embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
-    embedder = CachingEmbedder(base_embedder, cache_dir=os.getenv("EMB_CACHE_DIR") or "./indexes/emb_cache")
+    embedder = CachingEmbedder(base_embedder)
     vec_store = ChromaVectorStore.from_config()
-    bm25_store = BM25Store.load_or_create("./indexes/bm25")
+    bm25_store = BM25Store.load_or_create()
 
     # ---- Subject resolution (routing) -------------------------------------
     # Priority: explicit doc_meta.subject > folder hint > auto-classify (only
@@ -531,9 +531,9 @@ def ask_question(
 
     # Components
     vec_store = ChromaVectorStore.from_config()
-    bm25_store = BM25Store.load_or_create("./indexes/bm25")
+    bm25_store = BM25Store.load_or_create()
     base_embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
-    embedder = CachingEmbedder(base_embedder, cache_dir=os.getenv("EMB_CACHE_DIR") or "./indexes/emb_cache")
+    embedder = CachingEmbedder(base_embedder)
 
     retriever = HybridRetriever(
         vector_store=vec_store,
