@@ -12,7 +12,10 @@ from pathlib import Path
 from typing import Iterable, List
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
+
+# sentence_transformers pulls in torch, which is several seconds and several
+# gigabytes. Imported inside the constructor so merely importing this module,
+# or anything re-exporting it, stays cheap.
 
 
 def _resolve_cache_dir() -> str | None:
@@ -60,6 +63,8 @@ class E5MultilingualEmbedder:
             st_kwargs["cache_folder"] = cache_dir
         if hf_token:
             st_kwargs["token"] = hf_token
+
+        from sentence_transformers import SentenceTransformer
 
         self.model = SentenceTransformer(**st_kwargs)
         self.normalize = bool(normalize)

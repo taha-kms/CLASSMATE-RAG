@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from huggingface_hub import snapshot_download
+# huggingface_hub is imported inside ensure_llama_model_available() so that
+# importing this module does not require it.
 
 
 def _read_env(var: str, default: Optional[str] = None) -> Optional[str]:
@@ -79,6 +80,8 @@ def ensure_llama_model_available() -> Path:
 
     # Download only the specified filename into ./models (resumable, no symlinks)
     try:
+        from huggingface_hub import snapshot_download
+
         snapshot_download(
             repo_id=repo_id,
             allow_patterns=[filename],

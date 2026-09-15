@@ -13,13 +13,9 @@ All four routes use the same E5 embedding model and the same prototype
 phrases, so ingest-time and query-time classification are consistent.
 """
 
-from .types import Route, RouteDecision, ROUTES, DEFAULT_ROUTE
-from .prototypes import SUBJECT_PROTOTYPES
-from .classifier import SubjectClassifier
-from .router import HybridRouter
-from .registry import ModelSpec, get_model_spec, route_model_paths
-from .loader import StickyModelLoader
-from .prompts import system_prompt_for
+from typing import TYPE_CHECKING
+
+from rag._lazy import lazy_exports
 
 __all__ = [
     "Route",
@@ -35,3 +31,30 @@ __all__ = [
     "StickyModelLoader",
     "system_prompt_for",
 ]
+
+# .classifier needs sentence-transformers and .loader needs llama_cpp. The
+# route types, prompts and registry are pure Python and stay reachable
+# without either.
+__getattr__, __dir__ = lazy_exports(__name__, {
+    "Route": ".types",
+    "RouteDecision": ".types",
+    "ROUTES": ".types",
+    "DEFAULT_ROUTE": ".types",
+    "SUBJECT_PROTOTYPES": ".prototypes",
+    "SubjectClassifier": ".classifier",
+    "HybridRouter": ".router",
+    "ModelSpec": ".registry",
+    "get_model_spec": ".registry",
+    "route_model_paths": ".registry",
+    "StickyModelLoader": ".loader",
+    "system_prompt_for": ".prompts",
+})
+
+if TYPE_CHECKING:  # pragma: no cover
+    from .classifier import SubjectClassifier
+    from .loader import StickyModelLoader
+    from .prompts import system_prompt_for
+    from .prototypes import SUBJECT_PROTOTYPES
+    from .registry import ModelSpec, get_model_spec, route_model_paths
+    from .router import HybridRouter
+    from .types import DEFAULT_ROUTE, ROUTES, Route, RouteDecision
