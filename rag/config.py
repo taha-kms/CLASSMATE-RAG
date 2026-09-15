@@ -250,6 +250,66 @@ def load_config(reload: bool = False) -> Config:
     return cfg
 
 
+def configure_logging(level: Optional[str] = None) -> None:
+    """
+    Install a basic logging configuration from LOG_LEVEL.
+
+    Config has carried a log_level for a while but nothing ever called
+    basicConfig, so every log record in the codebase was discarded. The model
+    load and evict messages in rag/routing/loader.py are the ones worth
+    seeing, since they explain why a query took forty seconds.
+
+    Records go to stderr on purpose. The CLI prints JSON on stdout and that
+    has to stay machine-readable.
+    """
+    import logging
+    import sys
+
+    name = str(level or load_config().log_level or "INFO").strip().upper()
+    resolved = getattr(logging, name, None)
+    if not isinstance(resolved, int):
+        resolved = logging.INFO
+
+    root = logging.getLogger()
+    if root.handlers:
+        # Something already configured logging (pytest, an embedding host
+        # app). Respect their handlers, just apply our level.
+        root.setLevel(resolved)
+        return
+
+    logging.basicConfig(
+        level=resolved,
+        format="%(levelname)s %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+    _quiet_noisy_libraries(resolved)
+
+
+# Libraries that log a line per HTTP request, or per model file touched, at
+# INFO. At the default level they would bury the handful of messages this
+# project actually emits.
+_NOISY_LOGGERS = (
+    "httpx",
+    "httpcore",
+    "urllib3",
+    "chromadb",
+    "posthog",
+    "sentence_transformers",
+    "transformers",
+    "filelock",
+)
+
+
+def _quiet_noisy_libraries(level: int) -> None:
+    """Hold third-party loggers at WARNING unless we are actually debugging."""
+    import logging
+
+    if level <= logging.DEBUG:
+        return  # the user asked for everything, so give them everything
+    for name in _NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 # Convenience getters (optional, to align with older code styles)
 def get_embedding_model_name() -> str:
     return load_config().embedding_model_name
