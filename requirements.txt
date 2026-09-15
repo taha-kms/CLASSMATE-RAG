@@ -4,6 +4,11 @@
 # chromadb-client alongside this: it installs into the same chromadb/
 # namespace and the two overwrite each other.
 chromadb>=0.6.3,<0.7
+# chromadb 0.6.3 calls posthog.capture() positionally. posthog 4 changed that
+# signature, so every command printed "Failed to send telemetry event
+# ClientStartEvent: capture() takes 1 positional argument but 3 were given".
+# Telemetry is off either way; this just stops the failure being reported.
+posthog<4
 rank-bm25>=0.2.2,<0.3
 numpy>=1.24,<2.0
 
