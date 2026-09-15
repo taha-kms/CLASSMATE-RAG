@@ -150,3 +150,37 @@ docker compose up -d
 * Run queries with the `rag` CLI.
 
 
+
+## Running in a container
+
+```bash
+docker build -t classmate-rag .
+docker run --rm classmate-rag --help
+```
+
+The image carries the application and its dependencies, nothing else.
+Models and indexes stay on the host and are mounted in:
+
+```bash
+docker run --rm \
+  -v "$PWD/models:/app/models" \
+  -v "$PWD/indexes:/app/indexes" \
+  -v "$PWD/data:/app/data" \
+  classmate-rag stats
+```
+
+It runs as a non-root user, uid 1000 by default. If your host user has a
+different uid, rebuild so bind-mounted files stay writable:
+
+```bash
+docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t classmate-rag .
+```
+
+The image ships the CPU build of PyTorch. A GPU image is a separate thing
+and needs the host to have nvidia-container-toolkit installed.
+
+OCR is not included. `ENABLE_OCR=true` needs poppler-utils and tesseract-ocr,
+which are deliberately left out to keep the image small.
+
+Running the whole stack, application and Chroma together, comes with the
+compose setup.
