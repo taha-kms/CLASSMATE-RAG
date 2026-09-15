@@ -1,0 +1,53 @@
+name: sonarcloud
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ "*" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    # Forked pull requests cannot read secrets, so the scan would fail with a
+    # missing token rather than tell anyone anything useful.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Sonar uses history to attribute issues to the commit that
+          # introduced them; a shallow clone blames everything on the tip.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-test.txt
+
+      - name: Produce coverage for Sonar
+        env:
+          PYTHONPATH: .
+        run: |
+          mkdir -p artifacts
+          pytest -q --cov --cov-report=xml:artifacts/coverage.xml
+
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
