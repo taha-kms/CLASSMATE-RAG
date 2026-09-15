@@ -6,6 +6,16 @@ on:
   pull_request:
     branches: [ "*" ]
 
+# Only what the job needs: check out the code and nothing else.
+permissions:
+  contents: read
+
+# A second push to the same branch cancels the first, instead of running the
+# whole three-version matrix twice and waiting for both.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pytest:
     runs-on: ubuntu-latest
