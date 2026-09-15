@@ -7,7 +7,9 @@ What lives here:
   both Chroma (vectors) and BM25 (lexical).
 - ask_question(): retrieve (hybrid) → apply neighbor expansion + doc-level diversity →
   build grounded prompt → run local LLM → optional translate-on-miss → strict citations.
-- index_stats(): quick health snapshot (counts + on-disk usage).
+
+Index health lives in rag.admin.inspect.index_stats, which is what
+rag.pipeline re-exports.
 
 Design notes
 - Chroma is used via the thin HTTP client; the actual Chroma server runs in Docker.
@@ -712,49 +714,3 @@ def ask_question(
         filters_applied=where,
         hybrid=bool(hybrid),
     )
-
-
-# =============================================================================
-# Stats
-# =============================================================================
-
-def index_stats() -> Dict[str, object]:
-    """
-    Return index health snapshot (best-effort):
-      - vector & BM25 counts (−1 when unavailable)
-      - disk usage for chroma / bm25 / embedding cache directories
-    """
-    vec = ChromaVectorStore.from_config()
-    bm = BM25Store.load_or_create("./indexes/bm25")
-
-    try:
-        vcount = int(vec.count())
-    except Exception:
-        vcount = -1
-
-    try:
-        bcount = int(bm.count())
-    except Exception:
-        bcount = -1
-
-    def _du(path: Path) -> int:
-        """Rough recursive disk usage in bytes."""
-        if not path.exists():
-            return 0
-        if path.is_file():
-            return path.stat().st_size
-        total = 0
-        for p in path.rglob("*"):
-            try:
-                if p.is_file():
-                    total += p.stat().st_size
-            except Exception:
-                continue
-        return total
-
-    usage = {
-        "chroma_bytes": _du(Path("./indexes/chroma")),
-        "bm25_bytes": _du(Path("./indexes/bm25")),
-        "emb_cache_bytes": _du(Path("./indexes/emb_cache")),
-    }
-    return {"vectors": vcount, "bm25": bcount, **usage}

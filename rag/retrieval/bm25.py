@@ -175,6 +175,10 @@ class BM25Store:
 
         self._rebuild()
 
+    def count(self) -> int:
+        """Number of documents currently indexed."""
+        return len(self._entries)
+
     def delete_many(self, ids: Sequence[str]) -> None:
         for doc_id in ids:
             self._entries.pop(doc_id, None)

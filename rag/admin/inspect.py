@@ -126,6 +126,8 @@ def index_stats() -> Dict[str, object]:
     chroma_dir = cfg.chroma_persist_directory
     bm25_dir = Path("./indexes/bm25")
 
+    bm25_count = BM25Store.load_or_create(bm25_dir).count()
+
     return {
         "vector_count": int(chroma_count),
         "chroma": {
@@ -135,6 +137,7 @@ def index_stats() -> Dict[str, object]:
         "bm25": {
             "persist_dir": str(bm25_dir.resolve()),
             "disk_bytes": _du_bytes(bm25_dir),
+            "count": int(bm25_count),
         },
         "collection": str(cfg.chroma_collection_name),
         "embedding_model": str(cfg.embedding_model_name),
