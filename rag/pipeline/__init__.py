@@ -29,16 +29,16 @@ internals live. (The project’s CLI imports exactly these four symbols from her
 """
 
 # Re-export the core pipeline entrypoints from the concrete implementation.
-from .rag import (
-    ingest_file,
-    ask_question,
-)
-
 # Re-export admin/observability helpers so callers can find them under
 # the same 'rag.pipeline' namespace.
 from rag.admin import (
-    retrieve_preview,
     index_stats,
+    retrieve_preview,
+)
+
+from .rag import (
+    ask_question,
+    ingest_file,
 )
 
 # Public API of this package: keep it explicit and minimal.

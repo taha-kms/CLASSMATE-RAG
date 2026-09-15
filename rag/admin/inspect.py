@@ -9,16 +9,14 @@ Functions:
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Mapping
 
 from rag.config import load_config
 from rag.embeddings import E5MultilingualEmbedder
-from rag.retrieval import ChromaVectorStore, BM25Store
-from rag.retrieval.fusion import HybridRetriever
 from rag.generation import format_context_blocks
-
+from rag.retrieval import BM25Store, ChromaVectorStore
+from rag.retrieval.fusion import HybridRetriever
 
 # ------------------------------
 # Helpers

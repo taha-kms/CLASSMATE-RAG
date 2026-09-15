@@ -1,9 +1,11 @@
 import pytest
+
 from rag.metadata.validation import validate_cli_metadata
+
 
 def test_validate_cli_metadata_fixup_false_rejects_bad_tag():
     raw = {"language": "en", "doc_type": "pdf", "tags": "bad tag with spaces"}
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         validate_cli_metadata(raw, fixup=False)
 
 def test_validate_cli_metadata_fixup_true_slugifies_and_infers_doc_type():
@@ -32,7 +34,7 @@ def test_validate_cli_metadata_bad_doc_type_behavior():
 
     # STRICT path: should error on unknown doc_type
     import pytest
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         validate_cli_metadata(raw, fixup=False, explicit_doc_type=True)
 
     # FIXUP path: should coerce/normalize instead of raising

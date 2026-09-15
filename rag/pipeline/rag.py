@@ -22,41 +22,41 @@ Design notes
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from rag.chunking import chunk_text
 
 # ---- Local modules ----------------------------------------------------------
-
 from rag.config import load_config
-from rag.metadata import DocumentMetadata
+from rag.embeddings.cache import CachingEmbedder
+from rag.generation import (
+    build_general_messages,
+    build_grounded_messages,
+    format_context_blocks,
+)
 from rag.loaders import (
     infer_doc_type_from_path,
     load_document_by_type,
 )
-from rag.chunking import chunk_text
+from rag.metadata import DocumentMetadata
+from rag.retrieval import BM25Store, ChromaVectorStore
+from rag.retrieval.expand import expand_with_neighbors
+from rag.retrieval.fusion import HybridRetriever
 from rag.utils import detect_lang_tag, stable_chunk_id
 from rag.utils.dedup import dedup_text_blocks
-from rag.embeddings.cache import CachingEmbedder
-from rag.retrieval import ChromaVectorStore, BM25Store
-from rag.retrieval.fusion import HybridRetriever
-from rag.retrieval.expand import expand_with_neighbors
-from rag.generation import (
-    build_grounded_messages,
-    build_general_messages,
-    format_context_blocks,
-)
 
 if TYPE_CHECKING:  # pragma: no cover - annotation only
     from rag.generation import LlamaCppRunner
 from rag.generation.post import enforce_citations
+
 # Route names and decision types are pure Python. The classifier, the
 # sticky loader and the prompt table are imported where they are used, so
 # importing this module does not load sentence-transformers or llama_cpp.
-from rag.routing.types import DEFAULT_ROUTE, ROUTES, Route, RouteDecision
+from rag.routing.types import ROUTES, Route, RouteDecision
 
 if TYPE_CHECKING:  # pragma: no cover - annotations only
     from rag.embeddings import E5MultilingualEmbedder
@@ -67,9 +67,11 @@ if TYPE_CHECKING:  # pragma: no cover - annotations only
 # Data models returned by the pipeline
 # =============================================================================
 
+
 @dataclass
 class IngestResult:
     """Summary returned by ingest_file()."""
+
     path: str
     doc_type: str
     total_pages: int
@@ -81,12 +83,13 @@ class IngestResult:
 @dataclass
 class AskResult:
     """Summary returned by ask_question()."""
+
     question: str
     answer: str
     language: str
     top_k: int
-    sources: List[str]                    # provenance strings aligned with [n] blocks
-    retrieved: List[Dict[str, object]]    # raw retrieved items (id, metadata, scores…)
+    sources: List[str]  # provenance strings aligned with [n] blocks
+    retrieved: List[Dict[str, object]]  # raw retrieved items (id, metadata, scores…)
     filters_applied: Dict[str, object]
     hybrid: bool
     # Populated when routing is enabled; None on the legacy single-model path.
@@ -149,12 +152,21 @@ def _folder_subject_hint(p: Path) -> Optional[str]:
     if not name:
         return None
     aliases = {
-        "math": "math", "mathematics": "math", "matematica": "math",
-        "code": "code", "coding": "code", "programming": "code",
-        "informatica": "code", "cs": "code",
-        "translation": "translation", "translate": "translation",
-        "traduzione": "translation", "lang": "translation",
-        "default": "default", "general": "default", "other": "default",
+        "math": "math",
+        "mathematics": "math",
+        "matematica": "math",
+        "code": "code",
+        "coding": "code",
+        "programming": "code",
+        "informatica": "code",
+        "cs": "code",
+        "translation": "translation",
+        "translate": "translation",
+        "traduzione": "translation",
+        "lang": "translation",
+        "default": "default",
+        "general": "default",
+        "other": "default",
     }
     return aliases.get(name)
 
@@ -163,9 +175,11 @@ def _folder_subject_hint(p: Path) -> Optional[str]:
 # Helpers — tags and metadata sanitization
 # =============================================================================
 
+
 def _slug_tag(t: str) -> str:
     """Lowercase + snake_case for tag names (conservative charset)."""
     import re
+
     s = (t or "").lower().strip()
     s = re.sub(r"[^a-z0-9]+", "_", s)
     return s.strip("_")
@@ -213,15 +227,23 @@ def _sanitize_metadata(meta: Dict[str, object]) -> Dict[str, object]:
 
     # Whitelist core fields (others are ignored or stringified)
     for k in (
-        "course", "unit", "language", "doc_type", "author",
-        "semester", "source_path", "created_at", "page", "chunk_id",
+        "course",
+        "unit",
+        "language",
+        "doc_type",
+        "author",
+        "semester",
+        "source_path",
+        "created_at",
+        "page",
+        "chunk_id",
         "subject",
     ):
         v = meta.get(k)
         if v is None:
             continue
         if isinstance(v, (str, int, float, bool)):
-            if isinstance(v, str) and not v.strip():   # skip empty strings
+            if isinstance(v, str) and not v.strip():  # skip empty strings
                 continue
             clean[k] = v
         else:
@@ -235,6 +257,7 @@ def _sanitize_metadata(meta: Dict[str, object]) -> Dict[str, object]:
 # =============================================================================
 # Ingest
 # =============================================================================
+
 
 def _concurrent_chunk_pages(
     pages: Sequence[Tuple[int, str]],
@@ -259,7 +282,7 @@ def _concurrent_chunk_pages(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
                 page=page,
-                starting_chunk_id=0,   # local id (discarded later)
+                starting_chunk_id=0,  # local id (discarded later)
             ): page
             for (page, text) in pages
         }
@@ -307,7 +330,9 @@ def ingest_file(
 
     # Concurrent chunking (defaults scale with CPU cores)
     max_workers_env = os.getenv("INGEST_THREADS")
-    max_workers = int(max_workers_env) if (max_workers_env and max_workers_env.isdigit()) else max(2, (os.cpu_count() or 4) // 2)
+    max_workers = (
+        int(max_workers_env) if (max_workers_env and max_workers_env.isdigit()) else max(2, (os.cpu_count() or 4) // 2)
+    )
     chunks = _concurrent_chunk_pages(
         pages,
         chunk_size=int(cfg.chunk_size),
@@ -369,7 +394,7 @@ def ingest_file(
     # Language policy: chunk-level detection when metadata requests "auto"
     base_lang = doc_meta.language.value if doc_meta.language else "auto"
 
-    for (page, chunk_id, text) in chunks:
+    for page, chunk_id, text in chunks:
         if not text.strip():
             continue
 
@@ -385,7 +410,7 @@ def ingest_file(
             "doc_type": doc_type,
             "author": doc_meta.author,
             "semester": doc_meta.semester,
-            "tags": doc_meta.tags,           # will be expanded to tag_* booleans
+            "tags": doc_meta.tags,  # will be expanded to tag_* booleans
             "source_path": str(p),
             "page": int(page),
             "chunk_id": int(chunk_id),
@@ -438,6 +463,7 @@ def ingest_file(
 # Retrieval ergonomics used by ask/preview
 # =============================================================================
 
+
 def _apply_expansion_and_diversity(
     results: List[Dict[str, object]],
 ) -> List[Dict[str, object]]:
@@ -462,6 +488,7 @@ def _apply_expansion_and_diversity(
 # =============================================================================
 # Ask
 # =============================================================================
+
 
 def _looks_unknown(ans: str, lang: str) -> bool:
     """Heuristic to detect explicit 'I don't know' answers in EN/IT."""
@@ -575,7 +602,6 @@ def ask_question(
         _dl = str(cfg.default_language)
         target_lang = _dl if _dl in ("en", "it") else detect_lang_tag(question)
 
-
     # We also pre-compute the provenance list aligned with [n] blocks
     _context_text, prov = format_context_blocks(results, max_total_chars=3500)
 
@@ -602,11 +628,7 @@ def ask_question(
         from rag.routing import system_prompt_for
 
         sys_prompt = system_prompt_for(decision.route, language=target_lang)
-        user_msg = (
-            f"Context:\n{_context_text}\n\n"
-            f"Question:\n{question}\n\n"
-            f"Answer:"
-        )
+        user_msg = f"Context:\n{_context_text}\n\nQuestion:\n{question}\n\nAnswer:"
         messages = [
             {"role": "system", "content": sys_prompt},
             {"role": "user", "content": user_msg},

@@ -1,5 +1,6 @@
 from rag.admin.manage import _matches_simple
 
+
 def test_matches_simple_with_tags_and_scalars():
     meta = {
         "course": "Math101",

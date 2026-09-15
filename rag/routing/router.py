@@ -52,7 +52,7 @@ class HybridRouter:
             return RouteDecision(
                 route=forced_subject,  # type: ignore[arg-type]
                 reason="forced",
-                query_scores={r: 0.0 for r in ROUTES},
+                query_scores=dict.fromkeys(ROUTES, 0.0),
                 meta_scores=_meta_fractions(retrieved_metas or []),
                 margin=0.0,
             )
@@ -137,7 +137,7 @@ def _meta_fractions(retrieved_metas: Sequence[Dict[str, object]]) -> Dict[Route,
     Count the `subject` tag across retrieved chunks and return per-route
     fractions. Chunks without a tag don't contribute.
     """
-    counts: Dict[Route, int] = {r: 0 for r in ROUTES}
+    counts: Dict[Route, int] = dict.fromkeys(ROUTES, 0)
     tagged = 0
     for meta in retrieved_metas:
         if not isinstance(meta, dict):
@@ -147,7 +147,7 @@ def _meta_fractions(retrieved_metas: Sequence[Dict[str, object]]) -> Dict[Route,
             counts[s] += 1  # type: ignore[index]
             tagged += 1
     if tagged == 0:
-        return {r: 0.0 for r in ROUTES}
+        return dict.fromkeys(ROUTES, 0.0)
     return {r: counts[r] / tagged for r in ROUTES}
 
 

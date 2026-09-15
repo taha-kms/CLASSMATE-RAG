@@ -10,13 +10,12 @@ Features:
 from __future__ import annotations
 
 import hashlib
-import os
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
-from rag.config import load_config
 
+from rag.config import load_config
 
 # ------------------------------
 # Helpers

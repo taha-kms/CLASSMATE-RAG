@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Sequence, List
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
@@ -222,11 +222,11 @@ class ChromaVectorStore:
         if include_embeddings:
             include.append("embeddings")
 
-        kwargs = dict(
-            query_embeddings=q.tolist(),
-            n_results=top_k,
-            include=include,
-        )
+        kwargs = {
+            "query_embeddings": q.tolist(),
+            "n_results": top_k,
+            "include": include,
+        }
         # Only include 'where' when we actually have one
         if where:
             kwargs["where"] = where

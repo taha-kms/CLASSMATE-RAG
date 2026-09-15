@@ -9,7 +9,6 @@ import pytest
 
 from rag.config import load_config
 
-
 PIPELINE_SETTINGS = [
     "enable_neighbor_expansion",
     "neighbor_radius",

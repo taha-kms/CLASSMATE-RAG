@@ -8,7 +8,8 @@ Includes:
 
 from __future__ import annotations
 
-from typing import List, Sequence, Tuple, Dict, Any
+from typing import Any, Dict, List, Sequence, Tuple
+
 
 def format_context_blocks(
     retrieved: Sequence[Dict[str, Any]],

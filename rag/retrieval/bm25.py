@@ -21,12 +21,12 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from rank_bm25 import BM25Okapi
 
-from rag.utils.lang_detect import detect_lang_tag
 from rag.config import load_config
+from rag.utils.lang_detect import detect_lang_tag
 
 # ---------------------------
 # Tokenization & stopwords
@@ -48,9 +48,9 @@ _STOP_IT = {
     "un","uno","una","le","la","il","lo","gli","i","l","e","o","ma","se","allora","altrimenti","per","di",
     "a","da","in","su","con","come","è","era","sono","siamo","siete","fui","fu","furono","essere","stato",
     "questo","questa","questi","queste","quello","quella","quelli","quelle","ciò","cio","io","tu","lui","lei","noi","voi","loro",
-    "mio","mia","tuo","tua","suo","sua","nostro","vostro","loro","non","no","si","sia","fare","fa","fatto","posso","può","puo",
-    "puoi","possono","dovrebbe","potrebbe","può","puo","sarà","sara","sarebbe","saremmo","sarete","siano","che","perché","perche",
-    "quando","dove","come","cosa","quale","chi",
+    "mio","mia","tuo","tua","suo","sua","nostro","vostro","non","no","si","sia","fare","fa","fatto","posso","può","puo",
+    "puoi","possono","dovrebbe","potrebbe","sarà","sara","sarebbe","saremmo","sarete","siano","che","perché","perche",
+    "quando","dove","cosa","quale","chi",
 }
 
 def _choose_stopwords(lang_hint: Optional[str]) -> set[str]:
@@ -212,7 +212,7 @@ class BM25Store:
 
         scores = bm25.get_scores(q_tokens)
         # Rank
-        ranked = sorted(zip(candidate_ids, scores), key=lambda x: x[1], reverse=True)[:top_k]
+        ranked = sorted(zip(candidate_ids, scores, strict=True), key=lambda x: x[1], reverse=True)[:top_k]
 
         out: List[Dict[str, Any]] = []
         for doc_id, score in ranked:

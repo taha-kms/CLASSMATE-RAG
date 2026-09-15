@@ -7,7 +7,7 @@ Falls back to 'en' when confidence is low or ambiguous.
 
 from __future__ import annotations
 
-from langdetect import detect, DetectorFactory
+from langdetect import DetectorFactory, detect
 
 # Make language detection deterministic across runs
 DetectorFactory.seed = 42

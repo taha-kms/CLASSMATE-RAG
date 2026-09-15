@@ -22,12 +22,13 @@ Notes
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 try:
     # Pydantic v1 (most common). If v2 is used, BaseModel import path is the same via shim.
     import pydantic
-    from pydantic import BaseModel, validator, root_validator as _raw_root_validator
+    from pydantic import BaseModel, validator
+    from pydantic import root_validator as _raw_root_validator
 except Exception as e:  # pragma: no cover
     raise ImportError(
         "pydantic is required for metadata validation. Please add 'pydantic>=1.10,<3' to requirements.txt"
@@ -174,7 +175,7 @@ def validate_cli_metadata(
     """
     try:
         data = _MetaInput(**raw).dict()
-    except Exception as e:
+    except Exception:
         if not fixup:
             # re-raise clearly
             raise

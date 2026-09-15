@@ -5,16 +5,14 @@ Hybrid retrieval with Reciprocal Rank Fusion (RRF) + optional MMR diversificatio
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:  # pragma: no cover - annotation only, keeps torch out of the import
     from rag.embeddings import E5MultilingualEmbedder
-from rag.retrieval.vector_chroma import ChromaVectorStore, build_where_filter
 from rag.retrieval.bm25 import BM25Store
+from rag.retrieval.vector_chroma import ChromaVectorStore, build_where_filter
 
 
 def rrf_fuse(
@@ -80,12 +78,14 @@ class HybridRetriever:
     mmr_lambda: float = 0.5
     mmr_max_pool: int = 24
 
-    def _vector_search(self, *, query: str, where: Optional[Mapping[str, object]], k: int) -> List[Mapping[str, object]]:
+    def _vector_search(
+        self, *, query: str, where: Optional[Mapping[str, object]], k: int
+    ) -> List[Mapping[str, object]]:
         q_vec = self.embedder.encode_queries([query])[0]
         pool_size = max(k, self.mmr_max_pool) if self.use_mmr else k
         res = self.vector_store.query(
             query_embeddings=q_vec,
-            where=where,                     # pass Chroma-style where (or None)
+            where=where,  # pass Chroma-style where (or None)
             top_k=pool_size,
             include_documents=True,
             include_embeddings=self.use_mmr,
@@ -141,14 +141,30 @@ class HybridRetriever:
         by_id: Dict[str, Dict[str, object]] = {}
         for r in vec_res:
             _id = r["id"]
-            item = by_id.setdefault(_id, {"id": _id, "document": None, "metadata": {}, "scores": {"vector_distance": None, "bm25_score": None, "fused": 0.0}})
+            item = by_id.setdefault(
+                _id,
+                {
+                    "id": _id,
+                    "document": None,
+                    "metadata": {},
+                    "scores": {"vector_distance": None, "bm25_score": None, "fused": 0.0},
+                },
+            )
             item["document"] = item["document"] or r.get("document")
             item["metadata"] = item["metadata"] or r.get("metadata") or {}
             item["scores"]["vector_distance"] = r.get("distance")
 
         for r in bm25_res:
             _id = r["id"]
-            item = by_id.setdefault(_id, {"id": _id, "document": None, "metadata": {}, "scores": {"vector_distance": None, "bm25_score": None, "fused": 0.0}})
+            item = by_id.setdefault(
+                _id,
+                {
+                    "id": _id,
+                    "document": None,
+                    "metadata": {},
+                    "scores": {"vector_distance": None, "bm25_score": None, "fused": 0.0},
+                },
+            )
             if not item["document"] and r.get("document"):
                 item["document"] = r.get("document")
             if not item["metadata"] and r.get("metadata"):

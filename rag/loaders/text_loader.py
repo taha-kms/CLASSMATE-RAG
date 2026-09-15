@@ -11,11 +11,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from bs4 import BeautifulSoup
 import markdown as md
+from bs4 import BeautifulSoup
 
 from rag.utils.text import normalize_text
-
 
 _FRONT_MATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
 # Match fenced code blocks using ``` or ~~~

@@ -29,3 +29,24 @@ include = ["cli*", "rag*"]
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
 optional-dependencies.dev = { file = ["requirements-test.txt"] }
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = [".venv", "indexes", "models", "data"]
+
+[tool.ruff.lint]
+# Deliberately not the full default set yet. pyupgrade (UP) alone would
+# rewrite 464 annotations across every file, which belongs in its own change.
+select = ["E", "F", "I", "B", "C4"]
+
+[tool.ruff.lint.per-file-ignores]
+# The project .env has to be read before transformers is imported, so the
+# import order in this module is load-bearing.
+"cli/main.py" = ["E402"]
+# Lazy re-exports are resolved through __getattr__; the TYPE_CHECKING imports
+# exist for editors and type checkers, not at runtime.
+"rag/*/__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["rag", "cli"]

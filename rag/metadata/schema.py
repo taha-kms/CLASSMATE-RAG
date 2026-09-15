@@ -12,7 +12,7 @@ Now includes support for PowerPoint (.pptx).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 

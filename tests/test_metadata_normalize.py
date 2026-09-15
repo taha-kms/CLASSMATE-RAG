@@ -1,4 +1,4 @@
-from rag.metadata import normalize_cli_metadata, LanguageEnum, DocTypeEnum
+from rag.metadata import DocTypeEnum, LanguageEnum, normalize_cli_metadata
 
 
 def test_to_dict_strips_auto_and_other_sentinels():

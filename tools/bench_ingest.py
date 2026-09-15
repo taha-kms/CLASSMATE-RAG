@@ -9,12 +9,11 @@ Examples:
 from __future__ import annotations
 
 import argparse
-import glob
 import time
 from pathlib import Path
 from typing import List
 
-from rag.metadata import normalize_cli_metadata, DocumentMetadata
+from rag.metadata import DocumentMetadata, normalize_cli_metadata
 from rag.pipeline import ingest_file
 
 

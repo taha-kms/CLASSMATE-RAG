@@ -10,9 +10,9 @@ Includes:
 
 from .chunker import (
     RagChunk,
-    sentence_split,
-    chunk_text,
     chunk_pages,
+    chunk_text,
+    sentence_split,
 )
 
 __all__ = [

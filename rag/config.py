@@ -19,9 +19,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
+
 
 def _project_root() -> Path:
     """
@@ -143,18 +144,10 @@ class Config:
 
     # Per-route GGUF paths. Empty strings disable that route (it falls back to
     # the default route). Override via env: ROUTE_<NAME>_MODEL_PATH.
-    route_math_model_path: Path = Path(
-        "./models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf"
-    )
-    route_code_model_path: Path = Path(
-        "./models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
-    )
-    route_translation_model_path: Path = Path(
-        "./models/salamandraTA-7B-instruct.Q4_K_M.gguf"
-    )
-    route_default_model_path: Path = Path(
-        "./models/Qwen3-8B-Q4_K_M.gguf"
-    )
+    route_math_model_path: Path = Path("./models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf")
+    route_code_model_path: Path = Path("./models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
+    route_translation_model_path: Path = Path("./models/salamandraTA-7B-instruct.Q4_K_M.gguf")
+    route_default_model_path: Path = Path("./models/Qwen3-8B-Q4_K_M.gguf")
 
     # Per-route context window. 4096 keeps VRAM headroom on 8 GB cards.
     route_n_ctx: int = 4096
@@ -213,15 +206,22 @@ def load_config(reload: bool = False) -> Config:
         embedding_model_name=_getenv_str("EMBEDDING_MODEL_NAME", "intfloat/multilingual-e5-base")
         or "intfloat/multilingual-e5-base",
         llm_backend=_getenv_str("LLM_BACKEND", "llama_cpp") or "llama_cpp",
-        llm_model_path=Path(_getenv_str("LLM_MODEL_PATH", "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf") or "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf"),
+        llm_model_path=Path(
+            _getenv_str("LLM_MODEL_PATH", "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf")
+            or "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf"
+        ),
         hf_token=_getenv_str("HF_TOKEN")
         or _getenv_str("HUGGINGFACE_HUB_TOKEN")
         or _getenv_str("CLASSMATE_RAG_HF_TOKEN"),
         llm_repo_id=_getenv_str("LLM_REPO_ID"),
         llm_filename=_getenv_str("LLM_FILENAME"),
-        chroma_persist_directory=resolve_data_path(_getenv_str("CHROMA_PERSIST_DIRECTORY", "./indexes/chroma") or "./indexes/chroma"),
+        chroma_persist_directory=resolve_data_path(
+            _getenv_str("CHROMA_PERSIST_DIRECTORY", "./indexes/chroma") or "./indexes/chroma"
+        ),
         bm25_directory=resolve_data_path(_getenv_str("BM25_DIRECTORY", "./indexes/bm25") or "./indexes/bm25"),
-        emb_cache_directory=resolve_data_path(_getenv_str("EMB_CACHE_DIR", "./indexes/emb_cache") or "./indexes/emb_cache"),
+        emb_cache_directory=resolve_data_path(
+            _getenv_str("EMB_CACHE_DIR", "./indexes/emb_cache") or "./indexes/emb_cache"
+        ),
         chroma_collection_name=_getenv_str("CHROMA_COLLECTION_NAME", "classmate_rag") or "classmate_rag",
         chunk_size=_getenv_int("CHUNK_SIZE", 1000),
         chunk_overlap=_getenv_int("CHUNK_OVERLAP", 150),
@@ -252,8 +252,7 @@ def load_config(reload: bool = False) -> Config:
             or "./models/salamandraTA-7B-instruct.Q4_K_M.gguf"
         ),
         route_default_model_path=Path(
-            _getenv_str("ROUTE_DEFAULT_MODEL_PATH", "./models/Qwen3-8B-Q4_K_M.gguf")
-            or "./models/Qwen3-8B-Q4_K_M.gguf"
+            _getenv_str("ROUTE_DEFAULT_MODEL_PATH", "./models/Qwen3-8B-Q4_K_M.gguf") or "./models/Qwen3-8B-Q4_K_M.gguf"
         ),
         route_n_ctx=_getenv_int("ROUTE_N_CTX", 4096),
         route_n_gpu_layers=_getenv_int("ROUTE_N_GPU_LAYERS", 0),
@@ -346,19 +345,19 @@ def get_chroma_settings() -> tuple[Path, str]:
 
 def get_retrieval_settings() -> dict:
     c = load_config()
-    return dict(
-        chunk_size=c.chunk_size,
-        chunk_overlap=c.chunk_overlap,
-        k_vector=c.k_vector,
-        k_bm25=c.k_bm25,
-        use_hybrid=c.use_hybrid,
-    )
+    return {
+        "chunk_size": c.chunk_size,
+        "chunk_overlap": c.chunk_overlap,
+        "k_vector": c.k_vector,
+        "k_bm25": c.k_bm25,
+        "use_hybrid": c.use_hybrid,
+    }
 
 
 def get_processing_toggles() -> dict:
     c = load_config()
-    return dict(
-        enable_ocr=c.enable_ocr,
-        enable_language_detection=c.enable_language_detection,
-        default_language=c.default_language,
-    )
+    return {
+        "enable_ocr": c.enable_ocr,
+        "enable_language_detection": c.enable_language_detection,
+        "default_language": c.default_language,
+    }
