@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Tuple
 
 from rag.chunking import chunk_text
 
@@ -49,7 +49,7 @@ from rag.utils import detect_lang_tag, stable_chunk_id
 from rag.utils.dedup import dedup_text_blocks
 
 if TYPE_CHECKING:  # pragma: no cover - annotation only
-    from rag.generation import LlamaCppRunner
+    pass
 from rag.generation.post import enforce_citations
 
 # Route names and decision types are pure Python. The classifier, the
@@ -507,17 +507,19 @@ def _needs_translation(answer: str, target_lang: str) -> bool:
     return det in {"en", "it"} and det != target_lang
 
 
-def _translate_text(text: str, target_lang: str, runner: Optional["LlamaCppRunner"] = None) -> str:
+def _translate_text(text: str, target_lang: str, *, chat: Callable[[List[Dict[str, str]]], str]) -> str:
     """
-    Translate to `target_lang` via the same local LLM runner, explicitly asking it to
-    preserve bracketed citations like [1], [2] exactly.
+    Translate to `target_lang`, asking the model to preserve bracketed
+    citations like [1], [2] exactly.
+
+    `chat` takes the message list and returns the reply. The caller supplies
+    it so the routed path can translate through its single resident model.
+    Building a runner here would load a second model alongside the one the
+    sticky loader already holds, which is the thing that loader exists to
+    prevent.
     """
     if not text.strip():
         return text
-    if runner is None:
-        from rag.generation import LlamaCppRunner
-
-        runner = LlamaCppRunner()
 
     if target_lang == "it":
         sys = (
@@ -533,8 +535,7 @@ def _translate_text(text: str, target_lang: str, runner: Optional["LlamaCppRunne
         prompt = f"Text to translate:\n{text}"
 
     msgs = [{"role": "system", "content": sys}, {"role": "user", "content": prompt}]
-    out = runner.chat(msgs, temperature=0.0, top_p=1.0, repeat_penalty=1.0, max_tokens=2048)
-    return out.strip() or text
+    return chat(msgs).strip() or text
 
 
 def ask_question(
@@ -660,6 +661,20 @@ def ask_question(
             ).strip()
             from_fallback = True
 
+        # Translate-on-miss, through the resident model rather than a second one.
+        if bool(cfg.translate_on_miss) and _needs_translation(answer, target_lang):
+            answer = _translate_text(
+                answer,
+                target_lang,
+                chat=lambda msgs: loader.chat(
+                    route=decision.route,
+                    messages=msgs,
+                    max_tokens=int(cfg.route_max_tokens),
+                    temperature=0.0,
+                    top_p=1.0,
+                ),
+            )
+
         strict_flag = bool(cfg.strict_citations)
         # Skip citation enforcement when the answer came from the no-context
         # fallback: the model never saw `prov`, so attaching it would be a lie.
@@ -710,7 +725,11 @@ def ask_question(
     # Translate-on-miss (if enabled in cfg/env) — but preserve [n]
     translate_flag = bool(cfg.translate_on_miss)
     if translate_flag and _needs_translation(answer, target_lang):
-        answer = _translate_text(answer, target_lang, runner=runner)
+        answer = _translate_text(
+            answer,
+            target_lang,
+            chat=lambda msgs: runner.chat(msgs, temperature=0.0, top_p=1.0, repeat_penalty=1.0, max_tokens=2048),
+        )
 
     # Strict citation enforcement (post-process). Skip when the answer came
     # from the no-context fallback: `prov` describes context the model never saw.
