@@ -37,19 +37,31 @@ def _jaccard(a: Set[Tuple[str, ...]], b: Set[Tuple[str, ...]]) -> float:
     union = len(a | b)
     return inter / union if union else 0.0
 
-def dedup_text_blocks(blocks: List[str], *, jaccard_threshold: float = 0.92) -> List[str]:
+def dedup_block_indices(blocks: List[str], *, jaccard_threshold: float = 0.92) -> List[int]:
     """
-    Preserve order; drop any block whose shingle Jaccard with any previously kept block exceeds threshold.
+    Indices of the blocks to keep, in order.
+
+    Returning positions rather than text lets callers filter a parallel list
+    (page numbers, chunk ids) without matching strings back up afterwards,
+    which is both fragile and quadratic when blocks repeat.
     """
-    kept: List[str] = []
+    kept: List[int] = []
     kept_sh: List[Set[Tuple[str, ...]]] = []
 
-    for text in blocks:
-        toks = _norm_tokens(text)
-        sh = _shingles(toks, k=5)
-        is_dup = any(_jaccard(sh, ksh) >= jaccard_threshold for ksh in kept_sh)
-        if not is_dup:
-            kept.append(text)
-            kept_sh.append(sh)
+    for i, text in enumerate(blocks):
+        sh = _shingles(_norm_tokens(text), k=5)
+        if any(_jaccard(sh, ksh) >= jaccard_threshold for ksh in kept_sh):
+            continue
+        kept.append(i)
+        kept_sh.append(sh)
 
     return kept
+
+
+def dedup_text_blocks(blocks: List[str], *, jaccard_threshold: float = 0.92) -> List[str]:
+    """
+    Preserve order; drop any block whose shingle Jaccard with any previously
+    kept block exceeds threshold.
+    """
+    keep = dedup_block_indices(blocks, jaccard_threshold=jaccard_threshold)
+    return [blocks[i] for i in keep]
