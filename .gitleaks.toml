@@ -1,0 +1,25 @@
+# Gitleaks configuration for CLASSMATE-RAG.
+title = "CLASSMATE-RAG"
+
+[extend]
+# Start from the maintained default rule set rather than hand-rolling
+# patterns for every provider.
+useDefault = true
+
+[allowlist]
+description = "Paths and values that look like secrets but are not"
+
+paths = [
+  # Placeholders, by design. HF_TOKEN there is empty and commented.
+  '''\.env\.example$''',
+  # Model weights and index data, none of it hand-written.
+  '''^models/''',
+  '''^indexes/''',
+  '''^data/''',
+]
+
+regexes = [
+  # The example file documents variable names without values.
+  '''HF_TOKEN=\s*$''',
+  '''<your_token>''',
+]
