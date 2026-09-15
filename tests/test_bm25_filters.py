@@ -65,3 +65,22 @@ def test_a_non_matching_filter_still_excludes(tmp_path):
     store = BM25Store.load_or_create(tmp_path / "bm25")
     store.upsert_many(ids=["a"], texts=["The chain rule."], metadatas=[CHUNK_META])
     assert store.search(query="chain", where={"course": "Physics202"}, top_k=5) == []
+
+
+def test_count_reflects_upserts_and_deletes(tmp_path):
+    store = BM25Store.load_or_create(tmp_path / "bm25")
+    assert store.count() == 0
+
+    store.upsert_many(
+        ids=["a", "b"],
+        texts=["The chain rule.", "The product rule."],
+        metadatas=[CHUNK_META, CHUNK_META],
+    )
+    assert store.count() == 2
+
+    # Upserting the same id replaces rather than appends.
+    store.upsert_many(ids=["a"], texts=["The chain rule, again."], metadatas=[CHUNK_META])
+    assert store.count() == 2
+
+    store.delete_many(["a"])
+    assert store.count() == 1
