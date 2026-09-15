@@ -1,0 +1,86 @@
+name: docker
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ "*" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and smoke test the image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Load into the local daemon so the smoke test can run it. Pushing
+          # is the release workflow's job, not this one's.
+          load: true
+          push: false
+          tags: classmate-rag:ci
+          # llama-cpp-python compiles from source, so an uncached build is
+          # minutes. Cache it between runs.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+
+          echo "::group::entry point"
+          # Exercises the console script from #1 and the argparse wiring.
+          docker run --rm classmate-rag:ci --help | head -3
+          echo "::endgroup::"
+
+          echo "::group::runs as non-root"
+          docker run --rm --entrypoint id classmate-rag:ci
+          # Arguments after the image go to the entrypoint; putting -u before
+          # it makes docker claim the flag and the check silently passes.
+          uid="$(docker run --rm --entrypoint id classmate-rag:ci -u)"
+          echo "uid=${uid}"
+          test "${uid}" != "0"
+          echo "::endgroup::"
+
+          echo "::group::torch is the CPU build"
+          # A CUDA wheel slipping in would add gigabytes without anyone noticing.
+          docker run --rm --entrypoint python classmate-rag:ci -c \
+            "import torch; assert torch.version.cuda is None, torch.version.cuda; print(torch.__version__)"
+          docker run --rm --entrypoint sh classmate-rag:ci -c \
+            "! test -d /opt/venv/lib/python3.12/site-packages/nvidia"
+          echo "::endgroup::"
+
+          echo "::group::compiled extension and lazy imports"
+          # llama_cpp needs libgomp at load time, not import time, and the
+          # package __init__ files resolve their exports lazily (#6). Both
+          # can build cleanly and fail on first run.
+          docker run --rm --entrypoint python classmate-rag:ci -c \
+            "from llama_cpp import Llama; import rag.pipeline, rag.retrieval, rag.routing, rag.generation; print('ok')"
+          echo "::endgroup::"
+
+          echo "::group::project root resolves inside the image"
+          # Without pyproject.toml at /app the index paths from #15 would
+          # resolve against the working directory and build an empty index.
+          docker run --rm --entrypoint python classmate-rag:ci -c \
+            "from rag.config import load_config; c = load_config(); assert str(c.bm25_directory) == '/app/indexes/bm25', c.bm25_directory; print(c.bm25_directory)"
+          echo "::endgroup::"
+
+      - name: Report image size
+        run: |
+          docker image inspect classmate-rag:ci --format '{{.Size}}' \
+            | awk '{ printf "image size %.2f GB\n", $1/1024/1024/1024 }'
