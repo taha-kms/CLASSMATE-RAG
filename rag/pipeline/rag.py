@@ -50,7 +50,7 @@ from rag.utils.dedup import dedup_block_indices
 
 if TYPE_CHECKING:  # pragma: no cover - annotation only
     pass
-from rag.generation.post import enforce_citations
+from rag.generation.post import cited_indices, enforce_citations
 
 # Route names and decision types are pure Python. The classifier, the
 # sticky loader and the prompt table are imported where they are used, so
@@ -80,6 +80,14 @@ class IngestResult:
 
 
 @dataclass
+class Source:
+    """One source the answer actually cited."""
+
+    n: int  # the [n] marker as it appears in the answer
+    ref: str  # provenance string for that context block
+
+
+@dataclass
 class AskResult:
     """Summary returned by ask_question()."""
 
@@ -87,13 +95,39 @@ class AskResult:
     answer: str
     language: str
     top_k: int
-    sources: List[str]  # provenance strings aligned with [n] blocks
+    sources: List[Source]  # only what the answer cited, numbers matching the [n] markers
     retrieved: List[Dict[str, object]]  # raw retrieved items (id, metadata, scores…)
     filters_applied: Dict[str, object]
     hybrid: bool
+    # False when the answer cites nothing, so it came from the model rather
+    # than from the ingested documents.
+    grounded: bool = True
+    # Short line a UI can show muted next to an ungrounded answer.
+    notice: Optional[str] = None
     # Populated when routing is enabled; None on the legacy single-model path.
     route: Optional[str] = None
     route_reason: Optional[str] = None
+
+
+_UNGROUNDED_NOTICE = {
+    "en": "From the model's own knowledge, not your documents.",
+    "it": "Dalle conoscenze del modello, non dai tuoi documenti.",
+}
+
+
+def _attribute_sources(answer: str, provenance: List[str], language: str) -> tuple[List[Source], bool, Optional[str]]:
+    """
+    Pair the answer's [n] markers with their provenance.
+
+    Returns only the sources the answer cited. An answer citing nothing is
+    still returned, but reported as ungrounded with no sources attached,
+    because listing everything retrieval returned would imply the answer
+    rested on it.
+    """
+    cited = [i for i in cited_indices(answer) if 1 <= i <= len(provenance)]
+    if not cited:
+        return [], False, _UNGROUNDED_NOTICE.get(language, _UNGROUNDED_NOTICE["en"])
+    return [Source(n=i, ref=provenance[i - 1]) for i in cited], True, None
 
 
 # =============================================================================
@@ -680,12 +714,15 @@ def ask_question(
                 sources_title="Sources" if target_lang == "en" else "Fonti",
             )
 
+        sources, grounded, notice = _attribute_sources(answer, [] if from_fallback else prov, target_lang)
         return AskResult(
             question=question,
             answer=answer,
             language=target_lang,
             top_k=int(top_k),
-            sources=[] if from_fallback else prov,
+            sources=sources,
+            grounded=grounded,
+            notice=notice,
             retrieved=results,
             filters_applied=where,
             hybrid=bool(hybrid),
@@ -736,12 +773,15 @@ def ask_question(
             sources_title="Sources" if target_lang == "en" else "Fonti",
         )
 
+    sources, grounded, notice = _attribute_sources(answer, [] if from_fallback else prov, target_lang)
     return AskResult(
         question=question,
         answer=answer,
         language=target_lang,
         top_k=int(top_k),
-        sources=[] if from_fallback else prov,
+        sources=sources,
+        grounded=grounded,
+        notice=notice,
         retrieved=results,
         filters_applied=where,
         hybrid=bool(hybrid),

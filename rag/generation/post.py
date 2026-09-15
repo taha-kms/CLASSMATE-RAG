@@ -18,6 +18,15 @@ _CIT_RE = re.compile(r"\[(\d+)\]")               # matches [number]
 _ADJ_RE = re.compile(r"\]\s*(?:,?\s*)\[")        # matches "] [", "], [", "]   [", etc.
 
 
+def cited_indices(text: str) -> List[int]:
+    """
+    The [n] numbers an answer actually uses, de-duplicated, in order of first
+    appearance. Callers use this to report only the sources the answer drew
+    on, rather than everything retrieval happened to return.
+    """
+    return _dedupe_preserve_order(_extract_citation_indices(text))
+
+
 def _extract_citation_indices(text: str) -> List[int]:
     """Return all citation numbers found in the text (as ints)."""
     return [int(m.group(1)) for m in _CIT_RE.finditer(text or "")]
