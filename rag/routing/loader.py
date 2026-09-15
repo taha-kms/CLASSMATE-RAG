@@ -5,10 +5,10 @@ On 8 GB VRAM only one ~7B Q4 model fits at a time, so this loader keeps
 exactly one llama_cpp.Llama instance resident. When a query asks for a
 different route, the previous instance is freed and the new one is loaded.
 
-Why we don't reuse rag.generation.LlamaCppRunner:
-- Its __init__ requires a model_path and exposes generate(), not chat().
-- The pipeline already calls a chat()-style API. Building a clean wrapper
-  here lets the routing path work without touching the existing runner.
+Model construction and completion unpacking are shared with
+LlamaCppRunner through rag.generation.llama_backend. What stays here is the
+part that is actually specific to routing: holding one model resident and
+swapping it when the route changes.
 """
 
 from __future__ import annotations
@@ -18,10 +18,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-try:
-    from llama_cpp import Llama
-except Exception:  # pragma: no cover - llama_cpp may not be installed in test envs
-    Llama = None  # type: ignore[assignment]
+from rag.generation.llama_backend import chat_completion, load_llama, require_llama
 
 from .registry import ModelSpec, get_model_spec
 from .types import Route
@@ -60,10 +57,7 @@ class StickyModelLoader:
         ModelSpec actually in use (which may have been demoted to the
         default route if `route`'s file is missing).
         """
-        if Llama is None:
-            raise RuntimeError(
-                "llama-cpp-python is not installed; cannot load any route model."
-            )
+        require_llama()
 
         target = get_model_spec(route, fallback_to_default=self.fallback_to_default)
 
@@ -77,12 +71,12 @@ class StickyModelLoader:
             "Loading route=%s model=%s n_ctx=%d gpu_layers=%d",
             target.route, target.model_path, target.n_ctx, target.n_gpu_layers,
         )
-        llm = Llama(
-            model_path=str(target.model_path),
-            n_ctx=int(target.n_ctx),
-            n_gpu_layers=int(target.n_gpu_layers),
-            seed=int(target.seed),
-            verbose=bool(target.verbose),
+        llm = load_llama(
+            target.model_path,
+            n_ctx=target.n_ctx,
+            n_gpu_layers=target.n_gpu_layers,
+            seed=target.seed,
+            verbose=target.verbose,
         )
         self._resident = _ResidentModel(spec=target, llm=llm)
         return target
@@ -127,21 +121,15 @@ class StickyModelLoader:
         if self._resident is None or self._resident.llm is None:
             raise RuntimeError(f"Model for route '{spec.route}' failed to load.")
 
-        llm = self._resident.llm
-        # llama_cpp.Llama.create_chat_completion takes OpenAI-style messages.
-        result = llm.create_chat_completion(  # type: ignore[attr-defined]
-            messages=messages,
-            max_tokens=int(max_tokens),
-            temperature=float(temperature),
-            top_p=float(top_p),
-            repeat_penalty=float(repeat_penalty),
+        return chat_completion(
+            self._resident.llm,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            repeat_penalty=repeat_penalty,
             stop=stop,
         )
-        try:
-            content = result["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
-            content = ""
-        return (content or "").strip()
 
     # ------------------------------------------------------------------
     # Introspection

@@ -2,7 +2,6 @@
 
 from rag.utils.dedup import dedup_block_indices, dedup_text_blocks
 
-
 UNIQUE = [
     "The chain rule differentiates a composition of two functions.",
     "The product rule handles a product of two differentiable functions.",

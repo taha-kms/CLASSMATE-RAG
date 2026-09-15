@@ -16,12 +16,8 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-try:
-    from llama_cpp import Llama
-except ImportError:  # pragma: no cover - llama.cpp is an optional compile
-    Llama = None  # type: ignore[assignment]
-
 from rag.config import load_config
+from rag.generation.llama_backend import chat_completion, load_llama, require_llama
 from rag.model_fetch import ensure_llama_model_available
 
 
@@ -47,21 +43,13 @@ class LlamaCppRunner:
                 # Fall back to the configured path; existence is enforced below.
                 pass
 
-        if Llama is None:
-            raise RuntimeError(
-                "llama-cpp-python is not installed, so no local model can be run. "
-                "Install it with `pip install llama-cpp-python`."
-            )
-
-        p = Path(model_path).expanduser().resolve()
-        if not p.exists():
-            raise FileNotFoundError(f"Model file not found: {p}")
+        require_llama()
 
         if n_gpu_layers is None:
             n_gpu_layers = int(os.getenv("LLAMA_GPU_LAYERS", "0"))
 
-        self.model = Llama(
-            model_path=str(p),
+        self.model = load_llama(
+            model_path,
             n_ctx=n_ctx,
             n_gpu_layers=n_gpu_layers,
             seed=seed,
@@ -79,19 +67,15 @@ class LlamaCppRunner:
         stop: Optional[List[str]] = None,
     ) -> str:
         """Run an OpenAI-style chat completion and return the assistant text."""
-        result = self.model.create_chat_completion(
-            messages=messages,
-            max_tokens=int(max_tokens),
-            temperature=float(temperature),
-            top_p=float(top_p),
-            repeat_penalty=float(repeat_penalty),
+        return chat_completion(
+            self.model,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            repeat_penalty=repeat_penalty,
             stop=stop,
         )
-        try:
-            content = result["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
-            content = ""
-        return (content or "").strip()
 
     def generate(
         self,
