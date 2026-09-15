@@ -122,6 +122,16 @@ class Config:
     # Language behavior
     default_language: str = "auto"  # "en" | "it" | "auto"
 
+    # Retrieval ergonomics applied after fusion
+    enable_neighbor_expansion: bool = True
+    neighbor_radius: int = 1
+    doc_diversity_cap: int = 3
+
+    # Answer post-processing
+    strict_citations: bool = False
+    append_sources_block: bool = False
+    translate_on_miss: bool = False
+
     # Logging
     log_level: str = "INFO"
 
@@ -221,6 +231,12 @@ def load_config(reload: bool = False) -> Config:
         enable_ocr=_getenv_bool("ENABLE_OCR", False),
         enable_language_detection=_getenv_bool("ENABLE_LANGUAGE_DETECTION", True),
         default_language=_getenv_str("DEFAULT_LANGUAGE", "auto") or "auto",
+        enable_neighbor_expansion=_getenv_bool("ENABLE_NEIGHBOR_EXPANSION", True),
+        neighbor_radius=_getenv_int("NEIGHBOR_RADIUS", 1),
+        doc_diversity_cap=_getenv_int("DOC_DIVERSITY_CAP", 3),
+        strict_citations=_getenv_bool("STRICT_CITATIONS", False),
+        append_sources_block=_getenv_bool("APPEND_SOURCES_BLOCK", False),
+        translate_on_miss=_getenv_bool("TRANSLATE_ON_MISS", False),
         log_level=_getenv_str("LOG_LEVEL", "INFO") or "INFO",
         enable_routing=_getenv_bool("ENABLE_ROUTING", False),
         route_math_model_path=Path(

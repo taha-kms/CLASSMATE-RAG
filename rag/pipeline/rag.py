@@ -435,21 +435,13 @@ def _apply_expansion_and_diversity(
     Expand each top hit with its neighbor chunks (same doc, adjacent chunk_ids)
     and cap how many chunks per doc we keep to balance breadth vs depth.
 
-    Tunables come from env or config:
-      - ENABLE_NEIGHBOR_EXPANSION (default: true)
-      - NEIGHBOR_RADIUS (default: 1)
-      - DOC_DIVERSITY_CAP (default: 3) :contentReference[oaicite:6]{index=6}
+    Tunables: ENABLE_NEIGHBOR_EXPANSION, NEIGHBOR_RADIUS, DOC_DIVERSITY_CAP,
+    all read through Config.
     """
     cfg = load_config()
-    enable_expand = str(os.getenv("ENABLE_NEIGHBOR_EXPANSION", "true")).strip().lower() in {"1", "true", "yes"}
-    radius = int(os.getenv("NEIGHBOR_RADIUS", "1"))
-    cap = int(os.getenv("DOC_DIVERSITY_CAP", "3"))
-
-    # Config can override env
-    radius = int(getattr(cfg, "neighbor_radius", radius))
-    cap = int(getattr(cfg, "doc_diversity_cap", cap))
-    if hasattr(cfg, "enable_neighbor_expansion"):
-        enable_expand = bool(getattr(cfg, "enable_neighbor_expansion"))
+    enable_expand = bool(cfg.enable_neighbor_expansion)
+    radius = int(cfg.neighbor_radius)
+    cap = int(cfg.doc_diversity_cap)
 
     if enable_expand and radius > 0:
         return expand_with_neighbors(results, radius=radius, max_per_doc=cap)
@@ -634,14 +626,11 @@ def ask_question(
             ).strip()
             from_fallback = True
 
-        strict_flag = (
-            bool(getattr(cfg, "strict_citations", False)) or
-            str(os.getenv("STRICT_CITATIONS", "")).strip().lower() in {"1", "true", "yes"}
-        )
+        strict_flag = bool(cfg.strict_citations)
         # Skip citation enforcement when the answer came from the no-context
         # fallback: the model never saw `prov`, so attaching it would be a lie.
         if strict_flag and not from_fallback:
-            add_sources = str(os.getenv("APPEND_SOURCES_BLOCK", "")).strip().lower() in {"1", "true", "yes"}
+            add_sources = bool(cfg.append_sources_block)
             answer = enforce_citations(
                 answer=answer,
                 provenance=prov,
@@ -682,21 +671,15 @@ def ask_question(
         from_fallback = True
 
     # Translate-on-miss (if enabled in cfg/env) — but preserve [n]
-    translate_flag = (
-        bool(getattr(cfg, "translate_on_miss", False)) or
-        str(os.getenv("TRANSLATE_ON_MISS", "")).strip().lower() in {"1", "true", "yes"}
-    )
+    translate_flag = bool(cfg.translate_on_miss)
     if translate_flag and _needs_translation(answer, target_lang):
         answer = _translate_text(answer, target_lang, runner=runner)
 
     # Strict citation enforcement (post-process). Skip when the answer came
     # from the no-context fallback: `prov` describes context the model never saw.
-    strict_flag = (
-        bool(getattr(cfg, "strict_citations", False)) or
-        str(os.getenv("STRICT_CITATIONS", "")).strip().lower() in {"1", "true", "yes"}
-    )
+    strict_flag = bool(cfg.strict_citations)
     if strict_flag and not from_fallback:
-        add_sources = str(os.getenv("APPEND_SOURCES_BLOCK", "")).strip().lower() in {"1", "true", "yes"}
+        add_sources = bool(cfg.append_sources_block)
         answer = enforce_citations(
             answer=answer,
             provenance=prov,
