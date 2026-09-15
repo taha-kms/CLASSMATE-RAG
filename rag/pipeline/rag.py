@@ -46,7 +46,7 @@ from rag.retrieval import BM25Store, ChromaVectorStore
 from rag.retrieval.expand import expand_with_neighbors
 from rag.retrieval.fusion import HybridRetriever
 from rag.utils import detect_lang_tag, stable_chunk_id
-from rag.utils.dedup import dedup_text_blocks
+from rag.utils.dedup import dedup_block_indices
 
 if TYPE_CHECKING:  # pragma: no cover - annotation only
     pass
@@ -340,19 +340,12 @@ def ingest_file(
     dedup_on = bool(cfg.dedup_chunks)
     dedup_thr = float(cfg.dedup_threshold)
     if dedup_on and chunks:
-        blocks = [t for (_pg, _cid, t) in chunks]
-        kept_blocks = dedup_text_blocks(blocks, jaccard_threshold=dedup_thr)
-        # Rebuild chunks keeping order and reassigning global ids
-        chunks = []
-        cid = 0
-        # reuse sequential chunking deterministically (single-thread to preserve order)
-        for page, _old_cid, text in _concurrent_chunk_pages(
-            pages, chunk_size=int(cfg.chunk_size), chunk_overlap=int(cfg.chunk_overlap), max_workers=1
-        ):
-            if text in kept_blocks:
-                chunks.append((page, cid, text))
-                kept_blocks.remove(text)
-                cid += 1
+        # Filter the chunks we already have. The previous version re-chunked
+        # every page a second time and then matched blocks back by string
+        # equality, which cost a full extra pass and mis-handled a document
+        # containing the same text twice.
+        keep = dedup_block_indices([t for (_pg, _cid, t) in chunks], jaccard_threshold=dedup_thr)
+        chunks = [(chunks[i][0], new_cid, chunks[i][2]) for new_cid, i in enumerate(keep)]
 
     created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
