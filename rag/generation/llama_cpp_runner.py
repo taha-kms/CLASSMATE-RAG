@@ -16,7 +16,10 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-from llama_cpp import Llama
+try:
+    from llama_cpp import Llama
+except ImportError:  # pragma: no cover - llama.cpp is an optional compile
+    Llama = None  # type: ignore[assignment]
 
 from rag.config import load_config
 from rag.model_fetch import ensure_llama_model_available
@@ -43,6 +46,12 @@ class LlamaCppRunner:
             except Exception:
                 # Fall back to the configured path; existence is enforced below.
                 pass
+
+        if Llama is None:
+            raise RuntimeError(
+                "llama-cpp-python is not installed, so no local model can be run. "
+                "Install it with `pip install llama-cpp-python`."
+            )
 
         p = Path(model_path).expanduser().resolve()
         if not p.exists():
