@@ -21,6 +21,9 @@ cp .env.example .env
 | `EMBEDDING_MODEL_NAME`     | Name of embedding model to use                  | `intfloat/multilingual-e5-base`   |
 | `CHROMA_PERSIST_DIRECTORY` | Path where Chroma vector DB is stored           | `./indexes/chroma`                |
 | `CHROMA_COLLECTION_NAME`   | Collection name inside Chroma                   | `rag_collection`                  |
+| `CHROMA_HTTP_URL`          | Chroma server endpoint; unset uses embedded mode | `http://localhost:8000`           |
+| `CHROMA_BIND_HOST`         | Interface docker-compose publishes Chroma on     | `127.0.0.1`                       |
+| `CHROMA_HOST_PORT`         | Host port docker-compose publishes Chroma on     | `8000`                            |
 | `HF_TOKEN`                 | (optional) HuggingFace token for private models | `<your_token>`                    |
 | `LLAMA_MODEL_PATH`         | Path to local `.gguf` model file                | `./models/mistral-7b.Q4_K_M.gguf` |
 | `LLAMA_CONTEXT_SIZE`       | Context window size for the model               | `2048`                            |
@@ -147,3 +150,18 @@ rag sources
 ```
 
 ---
+
+## Changing the Chroma port
+
+`CHROMA_HOST_PORT` moves the published port when something else on the machine
+already uses 8000:
+
+```bash
+CHROMA_HOST_PORT=8001 docker compose up -d chroma
+```
+
+Set it in `.env` instead to make it stick. `CHROMA_HTTP_URL` has to use the same
+port, otherwise the app starts normally and then fails on the first query.
+
+`CHROMA_BIND_HOST` defaults to `127.0.0.1`. Chroma has no authentication in front
+of it, so only change this if you understand what you are exposing.

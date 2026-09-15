@@ -3,7 +3,10 @@ services:
     image: chromadb/chroma:0.6.3
     container_name: classmate-chroma
     ports:
-      - "8000:8000"
+      # Host bind is configurable so the stack still comes up when something
+      # else already holds 8000. Loopback by default: there is no auth in
+      # front of Chroma and this is meant to run on one machine.
+      - "${CHROMA_BIND_HOST:-127.0.0.1}:${CHROMA_HOST_PORT:-8000}:8000"
     environment:
       - IS_PERSISTENT=TRUE
       - PERSIST_DIRECTORY=/chroma/chroma
