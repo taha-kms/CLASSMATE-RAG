@@ -8,3 +8,6 @@ __pycache__/
 !/models/.gitkeep
 /indexes/*
 !/indexes/.gitkeep
+*.egg-info/
+build/
+dist/

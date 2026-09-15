@@ -538,7 +538,7 @@ def build_parser() -> argparse.ArgumentParser:
     Define CLI structure, flags, choices, defaults, and handlers.
     Each subparser sets .set_defaults(func=...), which is called by main().
     """
-    p = argparse.ArgumentParser(prog="classmate", description="CLASSMATE-RAG CLI")
+    p = argparse.ArgumentParser(prog="rag", description="CLASSMATE-RAG CLI")
     sub = p.add_subparsers(dest="command", required=True)
 
     # --- add ---

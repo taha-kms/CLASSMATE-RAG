@@ -2,7 +2,7 @@
 set -euo pipefail
 
 VENV_DIR=".venv"
-REQ_FILE="requirements.txt"
+PROJECT_FILE="pyproject.toml"
 DOCKER_COMPOSE_FILE="docker-compose.yml"
 CHROMA_SERVICE_NAME="chroma"
 
@@ -24,26 +24,19 @@ source "${VENV_DIR}/bin/activate"
 echo "==> Upgrading pip..."
 python3 -m pip install --upgrade pip wheel
 
-if [ -f "${REQ_FILE}" ]; then
-  echo "==> Installing dependencies..."
-  pip install -r "${REQ_FILE}"
+if [ -f "${PROJECT_FILE}" ]; then
+  echo "==> Installing CLASSMATE-RAG and its dependencies..."
+  # Editable install also creates the `rag` console script declared in
+  # pyproject.toml, so there is no shell shim to keep in sync.
+  pip install -e .
 else
-  echo "WARNING: ${REQ_FILE} not found. Skipping dependencies."
+  echo "WARNING: ${PROJECT_FILE} not found. Skipping install."
 fi
 
 if [ -f ".env.example" ] && [ ! -f ".env" ]; then
   echo "==> Copying .env.example → .env"
   cp .env.example .env
 fi
-
-# --- Create rag shortcut command ---
-RAG_BIN="${VENV_DIR}/bin/rag"
-echo "==> Creating rag command shortcut..."
-cat > "${RAG_BIN}" <<'EOF'
-#!/usr/bin/env bash
-exec python -m rag.cli "$@"
-EOF
-chmod +x "${RAG_BIN}"
 
 # --- Start vector DB via Docker ---
 if command -v docker >/dev/null 2>&1; then
