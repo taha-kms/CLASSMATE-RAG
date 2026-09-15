@@ -4,7 +4,10 @@ Lock in the LlamaCppRunner public surface:
 - exposes .chat(messages, **kw) returning the assistant text
 - exposes .generate(prompt, **kw) for backward compatibility
 
-Skipped automatically when llama_cpp isn't installed (slim CI environment).
+Llama is stubbed out throughout, so these run without llama-cpp-python
+installed. That used to be impossible: the module imported llama_cpp at
+top level, so the whole file skipped in CI and the signature it claims to
+lock in was never actually checked there.
 """
 
 from pathlib import Path
@@ -12,9 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytest.importorskip("llama_cpp")
-
-from rag.generation.llama_cpp_runner import LlamaCppRunner  # noqa: E402
+from rag.generation.llama_cpp_runner import LlamaCppRunner
 
 
 def _patched_runner():
@@ -48,3 +49,16 @@ def test_runner_generate_still_works():
         r = LlamaCppRunner()
         out = r.generate("hello")
         assert out == "raw-ok"
+
+
+def test_a_clear_error_when_llama_cpp_is_not_installed():
+    with patch("rag.generation.llama_cpp_runner.Llama", None):
+        with pytest.raises(RuntimeError, match="llama-cpp-python is not installed"):
+            LlamaCppRunner(model_path="/tmp/whatever.gguf")
+
+
+def test_the_module_imports_without_llama_cpp():
+    # The guarded import is what lets CI exercise everything above.
+    import rag.generation.llama_cpp_runner as mod
+
+    assert hasattr(mod, "Llama")

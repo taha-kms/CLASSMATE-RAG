@@ -21,7 +21,6 @@ ROOT = Path(__file__).resolve().parents[1]
 # Leaf modules that each wrap one third-party parser or runtime. These are
 # expected to need their library; everything else should import bare.
 NEEDS_ITS_OWN_LIBRARY = {
-    "rag.generation.llama_cpp_runner",
     "rag.loaders.docx_loader",
     "rag.loaders.epub_loader",
     "rag.loaders.html_loader",
