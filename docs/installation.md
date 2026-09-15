@@ -36,10 +36,13 @@ We provide helper scripts for Linux/macOS (`quicksetup.sh`) and Windows (`quicks
 They will:
 
 * Create a `.venv` virtual environment
-* Upgrade `pip` and install dependencies from `requirements.txt`
+* Upgrade `pip` and install the project with `pip install -e .`, which pulls the
+  dependencies and creates the `rag` command
 * Copy `.env.example` to `.env` if missing
 * Start the Docker-based vector DB
-* Create a shortcut command `rag` (instead of `python -m rag.cli`)
+
+If you would rather not use the helper script, `pip install -e .` on its own is
+enough. Add `pip install -r requirements-test.txt` to run the test suite.
 
 ### Linux / macOS
 

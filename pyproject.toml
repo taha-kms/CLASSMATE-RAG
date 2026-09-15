@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "classmate-rag"
+version = "0.1.0"
+description = "Retrieval-augmented generation over course materials, running locally"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Taha Kamalisadeghian", email = "tahakamali14@gmail.com" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dynamic = ["dependencies", "optional-dependencies"]
+
+[project.scripts]
+rag = "cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/taha-kms/CLASSMATE-RAG"
+Issues = "https://github.com/taha-kms/CLASSMATE-RAG/issues"
+
+[tool.setuptools.packages.find]
+include = ["cli*", "rag*"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+optional-dependencies.dev = { file = ["requirements-test.txt"] }

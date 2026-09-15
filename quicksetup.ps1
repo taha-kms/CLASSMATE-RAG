@@ -1,7 +1,7 @@
 # Quick setup script for Windows PowerShell
 
 $VENV_DIR = ".venv"
-$REQ_FILE = "requirements.txt"
+$PROJECT_FILE = "pyproject.toml"
 $DOCKER_COMPOSE_FILE = "docker-compose.yml"
 $CHROMA_SERVICE_NAME = "chroma"
 
@@ -22,22 +22,19 @@ Write-Host "==> Activating virtual environment..."
 Write-Host "==> Upgrading pip..."
 python -m pip install --upgrade pip wheel
 
-if (Test-Path $REQ_FILE) {
-    Write-Host "==> Installing dependencies..."
-    pip install -r $REQ_FILE
+if (Test-Path $PROJECT_FILE) {
+    Write-Host "==> Installing CLASSMATE-RAG and its dependencies..."
+    # Editable install also creates the `rag` console script declared in
+    # pyproject.toml, so there is no .cmd shim to keep in sync.
+    pip install -e .
 } else {
-    Write-Warning "$REQ_FILE not found. Skipping dependencies."
+    Write-Warning "$PROJECT_FILE not found. Skipping install."
 }
 
 if ((Test-Path ".env.example") -and -not (Test-Path ".env")) {
     Write-Host "==> Copying .env.example → .env"
     Copy-Item ".env.example" ".env"
 }
-
-# --- Create rag.cmd shortcut ---
-$RagCmd = "$VENV_DIR\Scripts\rag.cmd"
-Write-Host "==> Creating rag command shortcut..."
-"@echo off`r`npython -m rag.cli %*" | Out-File -FilePath $RagCmd -Encoding ASCII -Force
 
 # --- Start vector DB via Docker ---
 if (Get-Command docker -ErrorAction SilentlyContinue) {

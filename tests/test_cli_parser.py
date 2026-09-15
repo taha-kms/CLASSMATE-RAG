@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from cli.main import build_parser
@@ -84,3 +86,23 @@ def test_doc_type_choices_include_epub():
 def test_invalid_doc_type_rejected():
     with pytest.raises(SystemExit):
         _parse(["add", "x.pdf", "--doc-type", "pptzzz"])
+
+
+def test_parser_prog_matches_the_installed_command_name():
+    # The console script is named `rag`, so --help should say `rag`, not
+    # whatever the module happens to be called.
+    assert build_parser().prog == "rag"
+
+
+def test_pyproject_declares_the_rag_console_script():
+    # Guards the entry point against cli.main:main being moved or renamed
+    # without pyproject.toml following it. Read as text so this still runs
+    # on 3.10, which has no tomllib.
+    root = Path(__file__).resolve().parents[1]
+    text = (root / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'rag = "cli.main:main"' in text
+
+
+def test_console_script_target_is_callable():
+    from cli.main import main
+    assert callable(main)
