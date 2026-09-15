@@ -79,16 +79,35 @@ from __future__ import annotations
 # --- LOAD .env EARLY (so HF cache vars take effect before imports) ------------
 from pathlib import Path as _PathLike
 
-try:
-    # Load environment variables from project .env if present.
-    # This is important for things like:
-    # - Chroma server connection (CHROMA_API_IMPL, CHROMA_SERVER_HOST, ...)
-    # - HuggingFace caches/tokens (HF_HOME, HF_TOKEN)
-    from dotenv import load_dotenv  # type: ignore
-    load_dotenv(dotenv_path=_PathLike(__file__).resolve().parents[1] / ".env", override=True)
-except Exception:
-    # If dotenv isn't available or reading .env fails, proceed with OS env only.
-    pass
+def _load_project_env() -> None:
+    """
+    Load the project .env before the heavy imports further down.
+
+    The timing matters: transformers and sentence-transformers read their
+    cache variables (HF_HOME, HUGGINGFACE_HUB_CACHE, SENTENCE_TRANSFORMERS_HOME)
+    at import time, so the file has to be read first. Chroma connection
+    settings and HF_TOKEN come from here too.
+
+    override=False on purpose. A variable already exported in the shell beats
+    the file, which is how dotenv is normally expected to work and what
+    rag.config has always done. With override=True, `LOG_LEVEL=DEBUG rag stats`
+    was silently ignored because .env happened to set LOG_LEVEL, while a
+    setting merely commented out in .env worked fine — so whether an override
+    took effect depended on whether a line was uncommented.
+    """
+    try:
+        from dotenv import load_dotenv  # type: ignore
+
+        load_dotenv(
+            dotenv_path=_PathLike(__file__).resolve().parents[1] / ".env",
+            override=False,
+        )
+    except Exception:
+        # dotenv missing or the file unreadable: carry on with OS env only.
+        pass
+
+
+_load_project_env()
 # -----------------------------------------------------------------------------
 
 

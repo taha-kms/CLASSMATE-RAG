@@ -183,3 +183,18 @@ mostly model loads and evictions. Chatty third-party loggers (httpx,
 chromadb, transformers and friends) are held at `WARNING` so a single query
 does not produce a line per HTTP request. `DEBUG` lifts that and shows
 everything.
+
+## Where settings come from
+
+Precedence, highest first:
+
+1. Variables exported in your shell
+2. The project `.env`
+3. The defaults in `rag/config.py`
+
+So a one-off override works as you'd expect, without editing `.env`:
+
+```bash
+LOG_LEVEL=DEBUG rag ask "..."
+CHROMA_HOST_PORT=8001 docker compose up -d chroma
+```
