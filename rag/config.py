@@ -128,6 +128,16 @@ class Config:
     neighbor_radius: int = 1
     doc_diversity_cap: int = 3
 
+    # Ingestion tuning
+    ingest_threads: int = 0  # 0 means "derive from the CPU count"
+    dedup_chunks: bool = False
+    dedup_threshold: float = 0.92
+
+    # Generation parameters used by the routed path
+    route_max_tokens: int = 768
+    route_temperature: float = 0.2
+    route_top_p: float = 0.95
+
     # Answer post-processing
     strict_citations: bool = False
     append_sources_block: bool = False
@@ -168,6 +178,14 @@ class Config:
     route_translation_requires_intent: bool = True
 
     # --- Helpers / validations (explicitly called by runtime code) ---
+
+    def resolved_ingest_threads(self) -> int:
+        """Threads for page chunking. 0 means derive from the CPU count."""
+        import os as _os
+
+        if self.ingest_threads > 0:
+            return self.ingest_threads
+        return max(2, (_os.cpu_count() or 4) // 2)
 
     def validate_for_embeddings(self) -> None:
         """
@@ -234,6 +252,12 @@ def load_config(reload: bool = False) -> Config:
         enable_neighbor_expansion=_getenv_bool("ENABLE_NEIGHBOR_EXPANSION", True),
         neighbor_radius=_getenv_int("NEIGHBOR_RADIUS", 1),
         doc_diversity_cap=_getenv_int("DOC_DIVERSITY_CAP", 3),
+        ingest_threads=_getenv_int("INGEST_THREADS", 0),
+        dedup_chunks=_getenv_bool("DEDUP_CHUNKS", False),
+        dedup_threshold=_getenv_float("DEDUP_THRESHOLD", 0.92),
+        route_max_tokens=_getenv_int("ROUTE_MAX_TOKENS", 768),
+        route_temperature=_getenv_float("ROUTE_TEMPERATURE", 0.2),
+        route_top_p=_getenv_float("ROUTE_TOP_P", 0.95),
         strict_citations=_getenv_bool("STRICT_CITATIONS", False),
         append_sources_block=_getenv_bool("APPEND_SOURCES_BLOCK", False),
         translate_on_miss=_getenv_bool("TRANSLATE_ON_MISS", False),
