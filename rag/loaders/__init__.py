@@ -23,9 +23,10 @@ import os
 from pathlib import Path
 from typing import List, Tuple
 
-from .html_readable import load_html_readable
-from .csv_bullets import load_csv_bullets
-from .epub_loader import load_epub
+# html_readable pulls in bs4/readability-lxml and epub_loader pulls in
+# ebooklib. They are imported inside load_document_by_type() so that
+# infer_doc_type_from_path(), which the CLI needs just to name a file type,
+# does not require any parsing library to be installed.
 
 # Optional deps for document types
 try:
@@ -154,10 +155,16 @@ def load_document_by_type(
     if t == "md":
         return _load_md(p)
     if t == "html":
+        from .html_readable import load_html_readable
+
         return load_html_readable(p)
     if t == "csv":
+        from .csv_bullets import load_csv_bullets
+
         return load_csv_bullets(p)
     if t == "epub":
+        from .epub_loader import load_epub
+
         return load_epub(p)
     if t == "pdf":
         return _load_pdf(p)

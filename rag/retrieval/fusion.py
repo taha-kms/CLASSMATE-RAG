@@ -9,7 +9,10 @@ from typing import Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
-from rag.embeddings import E5MultilingualEmbedder
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - annotation only, keeps torch out of the import
+    from rag.embeddings import E5MultilingualEmbedder
 from rag.retrieval.vector_chroma import ChromaVectorStore, build_where_filter
 from rag.retrieval.bm25 import BM25Store
 
@@ -65,7 +68,7 @@ def _mmr_order(q: np.ndarray, cands: np.ndarray, ids: List[str], k: int, lambd: 
 class HybridRetriever:
     vector_store: ChromaVectorStore
     bm25_store: BM25Store
-    embedder: E5MultilingualEmbedder
+    embedder: "E5MultilingualEmbedder"
 
     k_vector: int = 8
     k_bm25: int = 8

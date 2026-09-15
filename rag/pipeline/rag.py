@@ -25,7 +25,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -40,25 +40,27 @@ from rag.loaders import (
 from rag.chunking import chunk_text
 from rag.utils import detect_lang_tag, stable_chunk_id
 from rag.utils.dedup import dedup_text_blocks
-from rag.embeddings import E5MultilingualEmbedder
 from rag.embeddings.cache import CachingEmbedder
 from rag.retrieval import ChromaVectorStore, BM25Store
 from rag.retrieval.fusion import HybridRetriever
 from rag.retrieval.expand import expand_with_neighbors
 from rag.generation import (
-    LlamaCppRunner,
     build_grounded_messages,
     build_general_messages,
     format_context_blocks,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - annotation only
+    from rag.generation import LlamaCppRunner
 from rag.generation.post import enforce_citations
-from rag.routing import (
-    HybridRouter,
-    StickyModelLoader,
-    SubjectClassifier,
-    system_prompt_for,
-)
+# Route names and decision types are pure Python. The classifier, the
+# sticky loader and the prompt table are imported where they are used, so
+# importing this module does not load sentence-transformers or llama_cpp.
 from rag.routing.types import DEFAULT_ROUTE, ROUTES, Route, RouteDecision
+
+if TYPE_CHECKING:  # pragma: no cover - annotations only
+    from rag.embeddings import E5MultilingualEmbedder
+    from rag.routing import HybridRouter, StickyModelLoader, SubjectClassifier
 
 
 # =============================================================================
@@ -103,17 +105,21 @@ _HYBRID_ROUTER: Optional[HybridRouter] = None
 _MODEL_LOADER: Optional[StickyModelLoader] = None
 
 
-def _get_subject_classifier(embedder: Optional[E5MultilingualEmbedder] = None) -> SubjectClassifier:
+def _get_subject_classifier(embedder: Optional["E5MultilingualEmbedder"] = None) -> "SubjectClassifier":
     """Lazy singleton. Pass an embedder to share E5 with the ingest path."""
     global _SUBJECT_CLASSIFIER
     if _SUBJECT_CLASSIFIER is None:
+        from rag.routing import SubjectClassifier
+
         _SUBJECT_CLASSIFIER = SubjectClassifier(embedder=embedder)
     return _SUBJECT_CLASSIFIER
 
 
-def _get_hybrid_router() -> HybridRouter:
+def _get_hybrid_router() -> "HybridRouter":
     global _HYBRID_ROUTER
     if _HYBRID_ROUTER is None:
+        from rag.routing import HybridRouter
+
         cfg = load_config()
         _HYBRID_ROUTER = HybridRouter(
             classifier=_get_subject_classifier(),
@@ -124,9 +130,11 @@ def _get_hybrid_router() -> HybridRouter:
     return _HYBRID_ROUTER
 
 
-def _get_model_loader() -> StickyModelLoader:
+def _get_model_loader() -> "StickyModelLoader":
     global _MODEL_LOADER
     if _MODEL_LOADER is None:
+        from rag.routing import StickyModelLoader
+
         _MODEL_LOADER = StickyModelLoader()
     return _MODEL_LOADER
 
@@ -333,6 +341,8 @@ def ingest_file(
     metas: List[Dict[str, object]] = []
 
     # Components (embedder + caches + stores)
+    from rag.embeddings import E5MultilingualEmbedder
+
     base_embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
     embedder = CachingEmbedder(base_embedder)
     vec_store = ChromaVectorStore.from_config()
@@ -474,7 +484,7 @@ def _needs_translation(answer: str, target_lang: str) -> bool:
     return det in {"en", "it"} and det != target_lang
 
 
-def _translate_text(text: str, target_lang: str, runner: Optional[LlamaCppRunner] = None) -> str:
+def _translate_text(text: str, target_lang: str, runner: Optional["LlamaCppRunner"] = None) -> str:
     """
     Translate to `target_lang` via the same local LLM runner, explicitly asking it to
     preserve bracketed citations like [1], [2] exactly. :contentReference[oaicite:8]{index=8}
@@ -482,6 +492,8 @@ def _translate_text(text: str, target_lang: str, runner: Optional[LlamaCppRunner
     if not text.strip():
         return text
     if runner is None:
+        from rag.generation import LlamaCppRunner
+
         runner = LlamaCppRunner()
 
     if target_lang == "it":
@@ -524,6 +536,8 @@ def ask_question(
     # Components
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create()
+    from rag.embeddings import E5MultilingualEmbedder
+
     base_embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
     embedder = CachingEmbedder(base_embedder)
 
@@ -585,6 +599,8 @@ def ask_question(
 
         # Build route-aware messages: route-specific system prompt + the
         # standard numbered-context user message.
+        from rag.routing import system_prompt_for
+
         sys_prompt = system_prompt_for(decision.route, language=target_lang)
         user_msg = (
             f"Context:\n{_context_text}\n\n"
@@ -659,7 +675,10 @@ def ask_question(
         citations_required=True,
     )
 
-    # Run local LLM
+    # Run local LLM. Imported here rather than at module scope so the
+    # pipeline can be imported (and tested) without a compiled llama.cpp.
+    from rag.generation import LlamaCppRunner
+
     runner = LlamaCppRunner()
     answer = runner.chat(messages).strip()
 
