@@ -1,6 +1,6 @@
 # Minimal deps to run the unit-test suite (tests/) without pulling the
 # full ML stack (torch, sentence-transformers, llama-cpp-python, chromadb…).
-pydantic<2
+pydantic>=2.7,<3
 pytest
 pytest-cov
 

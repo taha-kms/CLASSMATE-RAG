@@ -25,22 +25,11 @@ import re
 from typing import Any, Dict, List, Optional
 
 try:
-    # Pydantic v1 (most common). If v2 is used, BaseModel import path is the same via shim.
-    import pydantic
-    from pydantic import BaseModel, validator
-    from pydantic import root_validator as _raw_root_validator
+    from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 except Exception as e:  # pragma: no cover
     raise ImportError(
-        "pydantic is required for metadata validation. Please add 'pydantic>=1.10,<3' to requirements.txt"
+        "pydantic is required for metadata validation. Please add 'pydantic>=2.7,<3' to requirements.txt"
     ) from e
-
-
-# On Pydantic v2 the v1-shim @root_validator (pre=False) refuses to load unless
-# skip_on_failure=True is passed. Provide a single decorator that works on both.
-_PYD_V2 = str(getattr(pydantic, "VERSION", "1")).startswith("2.")
-root_validator = (
-    _raw_root_validator(skip_on_failure=True) if _PYD_V2 else _raw_root_validator
-)
 
 
 # ---- helpers ----
@@ -100,14 +89,15 @@ class _MetaInput(BaseModel):
     semester: Optional[str] = None
     tags: Optional[List[str]] = None  # already split; CLI may pass comma string -> we’ll split earlier
 
-    class Config:
-        anystr_strip_whitespace = True
+    model_config = ConfigDict(str_strip_whitespace=True)
 
-    @validator("course", "unit", "author", "semester", pre=True, always=True)
+    @field_validator("course", "unit", "author", "semester", mode="before")
+    @classmethod
     def _trim_or_none(cls, v):
         return _clean_str(v)
 
-    @validator("language", pre=True, always=True)
+    @field_validator("language", mode="before")
+    @classmethod
     def _language_norm(cls, v):
         v2 = _norm_lang(v)
         if v is None:
@@ -117,7 +107,8 @@ class _MetaInput(BaseModel):
             raise ValueError(f"unsupported language '{v}' (allowed: en/it/auto)")
         return v2
 
-    @validator("doc_type", pre=True, always=True)
+    @field_validator("doc_type", mode="before")
+    @classmethod
     def _doc_type_norm(cls, v):
         if v is None:
             return None
@@ -126,7 +117,8 @@ class _MetaInput(BaseModel):
             raise ValueError(f"unsupported doc_type '{v}' (allowed: {sorted(_DOC_TYPES)})")
         return v2
 
-    @validator("tags", pre=True, always=True)
+    @field_validator("tags", mode="before")
+    @classmethod
     def _ensure_tags_list(cls, v):
         if v is None:
             return None
@@ -139,13 +131,14 @@ class _MetaInput(BaseModel):
             arr = [x for x in arr if x]
         return arr or None
 
-    @root_validator
-    def _disallow_empty_strings(cls, values):
-        # Any field that became "" should be None already; enforce no empty strings remain.
-        for k, v in values.items():
-            if isinstance(v, str) and not v.strip():
-                values[k] = None
-        return values
+    @model_validator(mode="after")
+    def _disallow_empty_strings(self):
+        # Any field that became "" should already be None; make sure none slipped through.
+        for name in type(self).model_fields:
+            value = getattr(self, name)
+            if isinstance(value, str) and not value.strip():
+                setattr(self, name, None)
+        return self
 
 
 def validate_cli_metadata(
@@ -174,7 +167,7 @@ def validate_cli_metadata(
     Returns a cleaned dict with keys: course, unit, language, doc_type, author, semester, tags
     """
     try:
-        data = _MetaInput(**raw).dict()
+        data = _MetaInput(**raw).model_dump()
     except Exception:
         if not fixup:
             # re-raise clearly
