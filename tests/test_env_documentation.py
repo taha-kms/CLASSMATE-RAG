@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs" / "configuration.md"
 EXAMPLE = ROOT / ".env.example"

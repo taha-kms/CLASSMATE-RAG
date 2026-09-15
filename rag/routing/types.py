@@ -6,7 +6,7 @@ by the hybrid router.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Tuple
+from typing import Dict, Literal, Tuple
 
 # Canonical route names. The string values are stored in chunk metadata
 # under the `subject` key, so changing them is a breaking change for

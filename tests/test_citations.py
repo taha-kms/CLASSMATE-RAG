@@ -6,7 +6,6 @@ need llama_cpp just to import enforce_citations.
 
 from rag.generation import enforce_citations
 
-
 PROV = ["notes.md", "slides.pdf"]
 
 

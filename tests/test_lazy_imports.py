@@ -68,4 +68,4 @@ def test_an_unknown_export_still_raises_attribute_error():
     import rag.retrieval as retrieval
 
     with pytest.raises(AttributeError):
-        retrieval.NoSuchThing
+        retrieval.NoSuchThing  # noqa: B018 - the access is the assertion

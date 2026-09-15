@@ -1,9 +1,9 @@
 from .schema import (
-    LanguageEnum,
+    METADATA_FIELDS,
+    ChunkMetadata,
     DocTypeEnum,
     DocumentMetadata,
-    ChunkMetadata,
-    METADATA_FIELDS,
+    LanguageEnum,
     normalize_cli_metadata,
 )
 

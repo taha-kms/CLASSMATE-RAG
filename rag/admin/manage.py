@@ -20,8 +20,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from rag.metadata import DocumentMetadata
 from rag.config import load_config
+from rag.metadata import DocumentMetadata
+
 # rag.pipeline and rag.retrieval pull torch / chromadb / sentence-transformers.
 # Imported lazily inside the functions that actually need them so that test-only
 # helpers like _matches_simple stay importable in a slim environment.
@@ -184,7 +185,7 @@ def delete_by_ids(ids: Sequence[str]) -> Tuple[int, int]:
     if not ids:
         return (0, 0)
 
-    from rag.retrieval import ChromaVectorStore, BM25Store
+    from rag.retrieval import BM25Store, ChromaVectorStore
     vec = ChromaVectorStore.from_config()
     n_vec = 0
     try:

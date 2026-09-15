@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
+
 # huggingface_hub is imported inside ensure_llama_model_available() so that
 # importing this module does not require it.
 
@@ -118,4 +119,4 @@ if __name__ == "__main__":
         print(f"Model ready at: {p}")
     except Exception as e:
         print(f"ERROR: {e}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from e

@@ -8,9 +8,10 @@ We return a single (1, text) tuple; chunking will split further down the pipelin
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple, List
+from typing import List, Tuple
 
 from docx import Document
+
 from rag.utils.text import normalize_text
 
 

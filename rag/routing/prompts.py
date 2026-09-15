@@ -17,7 +17,6 @@ from typing import Optional
 
 from .types import Route
 
-
 _BASE_CITATION_RULES_EN = (
     "Answer using ONLY the numbered context blocks provided by the user. "
     "Cite each statement with the matching [n] from the context. "

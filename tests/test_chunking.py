@@ -1,6 +1,6 @@
-import pytest
 
-from rag.chunking.chunker import sentence_split, chunk_text, RagChunk
+from rag.chunking.chunker import RagChunk, chunk_text, sentence_split
+
 
 def test_sentence_split_basic_and_abbreviations():
     txt = "Dr. Smith went home. He slept well! E.g. this should not split"

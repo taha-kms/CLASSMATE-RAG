@@ -4,10 +4,8 @@ These cover the lexical half of hybrid retrieval, which has to agree with
 the Chroma half about what a filter value of None means.
 """
 
-import pytest
 
 from rag.retrieval.bm25 import BM25Store, _matches_filter
-
 
 CHUNK_META = {
     "course": "Calculus101",

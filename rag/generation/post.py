@@ -12,7 +12,6 @@ from __future__ import annotations
 import re
 from typing import Iterable, List, Set
 
-
 # --- Patterns for citation tokens and fixing spacing between them ---
 
 _CIT_RE = re.compile(r"\[(\d+)\]")               # matches [number]

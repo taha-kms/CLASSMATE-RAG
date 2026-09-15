@@ -84,7 +84,7 @@ class SubjectClassifier:
         Routes without a prototype (e.g. "default") get score 0.0.
         """
         if not question or not question.strip():
-            return {r: 0.0 for r in ROUTES}
+            return dict.fromkeys(ROUTES, 0.0)
         q = self.embedder.encode_queries([question])[0]
         q = _l2_normalize(q.astype("float32"))
         return {
@@ -95,7 +95,7 @@ class SubjectClassifier:
     def score_passage(self, text: str) -> Dict[Route, float]:
         """Cosine similarity of a passage (document chunk) against each prototype."""
         if not text or not text.strip():
-            return {r: 0.0 for r in ROUTES}
+            return dict.fromkeys(ROUTES, 0.0)
         p = self.embedder.encode_passages([text])[0]
         p = _l2_normalize(p.astype("float32"))
         return {
@@ -135,7 +135,7 @@ class SubjectClassifier:
         if not texts:
             return ClassificationResult(
                 subject=DEFAULT_ROUTE,
-                scores={r: 0.0 for r in ROUTES},
+                scores=dict.fromkeys(ROUTES, 0.0),
                 margin=0.0,
             )
         # Evenly-spaced sample to cover the document, not just its head.
@@ -145,7 +145,7 @@ class SubjectClassifier:
         else:
             sampled = texts
 
-        agg: Dict[Route, float] = {r: 0.0 for r in ROUTES}
+        agg: Dict[Route, float] = dict.fromkeys(ROUTES, 0.0)
         for t in sampled:
             for r, s in self.score_passage(t).items():
                 agg[r] += s

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from pypdf import PdfReader
+
 from rag.utils.text import normalize_text
 
 
@@ -22,8 +23,8 @@ def _ocr_page_images_to_text(pdf_path: Path, page_index_zero: int, ocr_lang: str
     Returns empty string if OCR unavailable or fails.
     """
     try:
-        from pdf2image import convert_from_path
         import pytesseract
+        from pdf2image import convert_from_path
     except Exception:
         return ""
 

@@ -4,7 +4,6 @@ import pytest
 
 from cli.main import build_parser
 
-
 SUBCOMMANDS = {
     "add", "ask", "preview", "stats", "dump", "restore", "vacuum",
     "rebuild", "list", "show", "delete", "reingest",

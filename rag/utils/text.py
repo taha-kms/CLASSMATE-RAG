@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import re
 
-
 _WS_RE = re.compile(r"[ \t]+")
 _NL_RE = re.compile(r"\n{3,}")
 

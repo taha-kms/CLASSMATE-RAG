@@ -79,6 +79,7 @@ from __future__ import annotations
 # --- LOAD .env EARLY (so HF cache vars take effect before imports) ------------
 from pathlib import Path as _PathLike
 
+
 def _load_project_env() -> None:
     """
     Load the project .env before the heavy imports further down.
@@ -115,20 +116,20 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 # --- Internal imports: CLI <-> RAG system glue -------------------------------
 # Only lightweight, dependency-free modules are imported at module load. Heavier
 # ML/IO dependencies (rag.pipeline, rag.admin.*, rag.loaders) are imported lazily
 # inside command handlers so `build_parser` (and the test that calls it) can run
 # without sentence-transformers / torch / chromadb installed.
-from rag.metadata import normalize_cli_metadata, DocumentMetadata
+from rag.metadata import DocumentMetadata, normalize_cli_metadata
 from rag.metadata.validation import validate_cli_metadata
-
 
 # -----------------------------------------------------------------------------
 # Small helpers
 # -----------------------------------------------------------------------------
+
 
 def _detect_doc_type_from_ext(path: Path) -> str:
     """
@@ -136,6 +137,7 @@ def _detect_doc_type_from_ext(path: Path) -> str:
     This keeps doc type detection consistent with the loader layer.
     """
     from rag.loaders import infer_doc_type_from_path
+
     return infer_doc_type_from_path(path)
 
 
@@ -188,6 +190,7 @@ def _validated_meta_from_args(
 # Command implementations
 # -----------------------------------------------------------------------------
 
+
 def cmd_add(args: argparse.Namespace) -> int:
     """
     Ingest a file into the corpus.
@@ -197,6 +200,7 @@ def cmd_add(args: argparse.Namespace) -> int:
       - Upserts into BOTH Chroma (vectors) and BM25 (lexical JSONL)
     """
     from rag.pipeline import ingest_file
+
     path = Path(args.path)
     if not path.exists():
         print(f"ERROR: file not found: {path}", file=sys.stderr)
@@ -219,16 +223,22 @@ def cmd_add(args: argparse.Namespace) -> int:
         return 1
 
     # Emit a compact JSON summary for users/automation
-    print(json.dumps({
-        "action": "ingest",
-        "file": str(path),
-        "doc_type": res.doc_type,
-        "total_pages": res.total_pages,
-        "total_chunks": res.total_chunks,
-        "upserted": res.upserted,
-        "created_at": res.created_at,
-        "metadata": meta.to_dict(),
-    }, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {
+                "action": "ingest",
+                "file": str(path),
+                "doc_type": res.doc_type,
+                "total_pages": res.total_pages,
+                "total_chunks": res.total_chunks,
+                "upserted": res.upserted,
+                "created_at": res.created_at,
+                "metadata": meta.to_dict(),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -238,6 +248,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
     Filters narrow the corpus by metadata (course/unit/author/tags/etc.).
     """
     from rag.pipeline import ask_question
+
     question = args.question.strip()
     if not question:
         print("ERROR: question cannot be empty", file=sys.stderr)
@@ -247,7 +258,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
     meta_filters: DocumentMetadata = _validated_meta_from_args(args=args)
 
     # CLI uses "on"/"off" for hybrid; pipeline expects a bool
-    hybrid = (args.hybrid == "on")
+    hybrid = args.hybrid == "on"
     try:
         res = ask_question(
             question=question,
@@ -283,6 +294,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
     Useful for debugging retrieval quality and filters before asking.
     """
     from rag.pipeline import retrieve_preview
+
     question = args.question.strip()
     if not question:
         print("ERROR: question cannot be empty", file=sys.stderr)
@@ -290,7 +302,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
 
     meta_filters: DocumentMetadata = _validated_meta_from_args(args=args)
 
-    hybrid = (args.hybrid == "on")
+    hybrid = args.hybrid == "on"
     try:
         items = retrieve_preview(
             question=question,
@@ -302,14 +314,20 @@ def cmd_preview(args: argparse.Namespace) -> int:
         print(json.dumps({"action": "preview", "error": str(e)}), file=sys.stderr)
         return 1
 
-    print(json.dumps({
-        "action": "preview",
-        "question": question,
-        "top_k": int(args.k),
-        "hybrid": hybrid,
-        "results": items,
-        "filters": meta_filters.to_dict(),
-    }, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {
+                "action": "preview",
+                "question": question,
+                "top_k": int(args.k),
+                "hybrid": hybrid,
+                "results": items,
+                "filters": meta_filters.to_dict(),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -320,6 +338,7 @@ def cmd_stats(_args: argparse.Namespace) -> int:
     - disk_bytes: sizes for Chroma and BM25 persistence
     """
     from rag.pipeline import index_stats
+
     try:
         s = index_stats()
     except Exception as e:
@@ -331,6 +350,7 @@ def cmd_stats(_args: argparse.Namespace) -> int:
 
 # ---------- Backup / Export / Migration ----------
 
+
 def cmd_dump(args: argparse.Namespace) -> int:
     """
     Export the corpus to JSONL:
@@ -338,13 +358,20 @@ def cmd_dump(args: argparse.Namespace) -> int:
     an embedding checksum for integrity checks across re-embeddings.
     """
     from rag.admin.backup import dump_index
+
     include_emb = not bool(args.no_emb)
     try:
         n = dump_index(args.path, include_embedding_checksum=include_emb, batch_size=int(args.batch_size))
     except Exception as e:
         print(json.dumps({"action": "dump", "error": str(e)}), file=sys.stderr)
         return 1
-    print(json.dumps({"action": "dump", "path": args.path, "wrote": n, "include_embedding_checksum": include_emb}, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {"action": "dump", "path": args.path, "wrote": n, "include_embedding_checksum": include_emb},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -353,6 +380,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
     Restore indexes from a JSONL dump (bulk upsert to Chroma + BM25).
     """
     from rag.admin.backup import restore_dump
+
     try:
         n = restore_dump(args.path, batch_size=int(args.batch_size))
     except Exception as e:
@@ -369,6 +397,7 @@ def cmd_vacuum(_args: argparse.Namespace) -> int:
       - Chroma: compact/persist if supported by wrapper
     """
     from rag.admin.backup import vacuum_indexes
+
     try:
         status = vacuum_indexes()
     except Exception as e:
@@ -384,6 +413,7 @@ def cmd_rebuild(args: argparse.Namespace) -> int:
     BM25 text stays the same (optionally re-saved to refresh timestamps).
     """
     from rag.admin.backup import rebuild_embeddings
+
     try:
         out = rebuild_embeddings(args.model, batch_size=int(args.batch_size))
     except Exception as e:
@@ -394,6 +424,7 @@ def cmd_rebuild(args: argparse.Namespace) -> int:
 
 
 # ---------- Ingestion management + validation ----------
+
 
 def _filters_from_args(args: argparse.Namespace) -> dict:
     """
@@ -409,6 +440,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     Output includes id, source_path, page, chunk_id, and a metadata summary.
     """
     from rag.admin.manage import list_entries
+
     where = _filters_from_args(args)
     entries = list_entries(where=where, limit=args.limit, offset=args.offset)
     out = {
@@ -440,7 +472,8 @@ def cmd_show(args: argparse.Namespace) -> int:
     Show detailed info for one or more chunk IDs, or all chunks from a source path.
     Useful to inspect actual snippet text and per-chunk metadata.
     """
-    from rag.admin.manage import show_entries_by_id, resolve_ids
+    from rag.admin.manage import resolve_ids, show_entries_by_id
+
     if not args.id and not args.path:
         print("ERROR: show requires --id or --path", file=sys.stderr)
         return 2
@@ -475,7 +508,8 @@ def cmd_delete(args: argparse.Namespace) -> int:
       - [filters]        : by metadata (course/unit/tags/etc.)
     Use --dry-run to preview without deleting.
     """
-    from rag.admin.manage import resolve_ids, delete_by_ids
+    from rag.admin.manage import delete_by_ids, resolve_ids
+
     # Resolve target IDs from (id | path | filters)
     ids: List[str] = []
     if args.id:
@@ -491,11 +525,23 @@ def cmd_delete(args: argparse.Namespace) -> int:
         return 0
 
     if args.dry_run:
-        print(json.dumps({"action": "delete", "dry_run": True, "would_delete": len(ids), "ids": ids}, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {"action": "delete", "dry_run": True, "would_delete": len(ids), "ids": ids},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return 0
 
     vec_n, bm25_n = delete_by_ids(ids)
-    print(json.dumps({"action": "delete", "deleted": len(ids), "vectors": vec_n, "bm25": bm25_n, "ids": ids}, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {"action": "delete", "deleted": len(ids), "vectors": vec_n, "bm25": bm25_n, "ids": ids},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -510,10 +556,11 @@ def cmd_reingest(args: argparse.Namespace) -> int:
     chunk size or upgrading the embedder), but it won't introduce *new* metadata.
     """
     from rag.admin.manage import (
-        show_entries_by_id,
         list_source_paths,
         reingest_paths,
+        show_entries_by_id,
     )
+
     targets: List[str] = []
 
     if args.path:
@@ -535,7 +582,13 @@ def cmd_reingest(args: argparse.Namespace) -> int:
         return 0
 
     if args.dry_run:
-        print(json.dumps({"action": "reingest", "dry_run": True, "would_reingest": len(targets), "paths": targets}, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {"action": "reingest", "dry_run": True, "would_reingest": len(targets), "paths": targets},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return 0
 
     try:
@@ -552,6 +605,7 @@ def cmd_reingest(args: argparse.Namespace) -> int:
 # Argument parser construction
 # -----------------------------------------------------------------------------
 
+
 def build_parser() -> argparse.ArgumentParser:
     """
     Define CLI structure, flags, choices, defaults, and handlers.
@@ -565,8 +619,15 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("path", help="Path to the document to ingest")
     pa.add_argument("--course", type=str, help="Course code or name")
     pa.add_argument("--unit", type=str, help="Unit/module name")
-    pa.add_argument("--language", type=str, choices=["en", "it", "auto"], default="auto", help="Language of the document (or auto)")
-    pa.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Document type (inferred by default)")
+    pa.add_argument(
+        "--language", type=str, choices=["en", "it", "auto"], default="auto", help="Language of the document (or auto)"
+    )
+    pa.add_argument(
+        "--doc-type",
+        type=str,
+        choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"],
+        help="Document type (inferred by default)",
+    )
     pa.add_argument("--author", type=str, help="Author or source")
     pa.add_argument("--semester", type=str, help="Semester label (e.g., 2025S)")
     pa.add_argument("--tags", type=str, help="Comma-separated tags (e.g., exam,week1,lab)")
@@ -578,13 +639,26 @@ def build_parser() -> argparse.ArgumentParser:
     pq.add_argument("question", help="The user question in English or Italian (use quotes)")
     pq.add_argument("--course", type=str, help="Filter by course")
     pq.add_argument("--unit", type=str, help="Filter by unit/module")
-    pq.add_argument("--language", type=str, choices=["en", "it", "auto"], default="auto", help="Answer/query language (auto=match question)")
-    pq.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Filter by document type")
+    pq.add_argument(
+        "--language",
+        type=str,
+        choices=["en", "it", "auto"],
+        default="auto",
+        help="Answer/query language (auto=match question)",
+    )
+    pq.add_argument(
+        "--doc-type",
+        type=str,
+        choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"],
+        help="Filter by document type",
+    )
     pq.add_argument("--author", type=str, help="Filter by author/source")
     pq.add_argument("--semester", type=str, help="Filter by semester")
     pq.add_argument("--tags", type=str, help="Filter by comma-separated tags")
     pq.add_argument("--k", type=int, default=8, help="Top-K results after fusion")
-    pq.add_argument("--hybrid", type=str, choices=["on", "off"], default="on", help="Use hybrid retrieval (vector+BM25)")
+    pq.add_argument(
+        "--hybrid", type=str, choices=["on", "off"], default="on", help="Use hybrid retrieval (vector+BM25)"
+    )
     pq.add_argument("--fixup", action="store_true", help="Auto-trim fields and slug tags if needed")
     pq.set_defaults(func=cmd_ask)
 
@@ -593,8 +667,19 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("question", help="The query/question")
     pp.add_argument("--course", type=str, help="Filter by course")
     pp.add_argument("--unit", type=str, help="Filter by unit/module")
-    pp.add_argument("--language", type=str, choices=["en", "it", "auto"], default="auto", help="Query/answer language (affects nothing here, just filter)")
-    pp.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Filter by document type")
+    pp.add_argument(
+        "--language",
+        type=str,
+        choices=["en", "it", "auto"],
+        default="auto",
+        help="Query/answer language (affects nothing here, just filter)",
+    )
+    pp.add_argument(
+        "--doc-type",
+        type=str,
+        choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"],
+        help="Filter by document type",
+    )
     pp.add_argument("--author", type=str, help="Filter by author/source")
     pp.add_argument("--semester", type=str, help="Filter by semester")
     pp.add_argument("--tags", type=str, help="Filter by comma-separated tags")
@@ -635,7 +720,12 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--course", type=str, help="Filter by course")
     pl.add_argument("--unit", type=str, help="Filter by unit")
     pl.add_argument("--language", type=str, choices=["en", "it", "auto"], help="Filter by language")
-    pl.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Filter by doc type")
+    pl.add_argument(
+        "--doc-type",
+        type=str,
+        choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"],
+        help="Filter by doc type",
+    )
     pl.add_argument("--author", type=str, help="Filter by author")
     pl.add_argument("--semester", type=str, help="Filter by semester")
     pl.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
@@ -657,7 +747,12 @@ def build_parser() -> argparse.ArgumentParser:
     pdel.add_argument("--course", type=str, help="Filter by course")
     pdel.add_argument("--unit", type=str, help="Filter by unit")
     pdel.add_argument("--language", type=str, choices=["en", "it", "auto"], help="Filter by language")
-    pdel.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Filter by doc type")
+    pdel.add_argument(
+        "--doc-type",
+        type=str,
+        choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"],
+        help="Filter by doc type",
+    )
     pdel.add_argument("--author", type=str, help="Filter by author")
     pdel.add_argument("--semester", type=str, help="Filter by semester")
     pdel.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
@@ -672,7 +767,12 @@ def build_parser() -> argparse.ArgumentParser:
     pre.add_argument("--course", type=str, help="Filter by course")
     pre.add_argument("--unit", type=str, help="Filter by unit")
     pre.add_argument("--language", type=str, choices=["en", "it", "auto"], help="Filter by language")
-    pre.add_argument("--doc-type", type=str, choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"], help="Filter by doc type")
+    pre.add_argument(
+        "--doc-type",
+        type=str,
+        choices=["pdf", "docx", "pptx", "md", "txt", "html", "csv", "epub", "other"],
+        help="Filter by doc type",
+    )
     pre.add_argument("--author", type=str, help="Filter by author")
     pre.add_argument("--semester", type=str, help="Filter by semester")
     pre.add_argument("--tags", type=str, help="Filter by tags (comma-separated)")
@@ -681,6 +781,7 @@ def build_parser() -> argparse.ArgumentParser:
     pre.set_defaults(func=cmd_reingest)
 
     return p
+
 
 def main(argv: Optional[list[str]] = None) -> int:
     """
@@ -696,6 +797,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     # work are visible instead of silently discarded. Imported here to keep
     # build_parser() importable without the config module's dependencies.
     from rag.config import configure_logging
+
     configure_logging()
 
     return args.func(args)

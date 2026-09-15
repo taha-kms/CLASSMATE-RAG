@@ -12,8 +12,8 @@ The BM25 JSONL catalog is treated as the source of truth for all chunks.
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 from pathlib import Path
 from typing import Dict, Iterator, List, Tuple
 
@@ -22,8 +22,7 @@ import numpy as np
 from rag.config import load_config
 from rag.embeddings import E5MultilingualEmbedder
 from rag.embeddings.cache import CachingEmbedder
-from rag.retrieval import ChromaVectorStore, BM25Store
-
+from rag.retrieval import BM25Store, ChromaVectorStore
 
 # ------------------------------
 # Internal helper functions
@@ -100,7 +99,7 @@ def dump_index(
             for batch in _batched(entries, batch_size):
                 texts = [t for (_id, t, _m) in batch]
                 vecs = embedder.encode_passages(texts)
-                for (cid, text, meta), vec in zip(batch, vecs):
+                for (cid, text, meta), vec in zip(batch, vecs, strict=True):
                     obj = {
                         "id": cid,
                         "text": text,
