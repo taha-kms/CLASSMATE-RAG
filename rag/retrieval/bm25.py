@@ -101,9 +101,19 @@ def _matches_filter(meta: Mapping[str, Any], where: Optional[Mapping[str, Any]])
 
     # simple equality
     for f in _FILTER_SIMPLE_FIELDS:
-        if f in where:
-            if meta.get(f) != where[f]:
-                return False
+        if f not in where:
+            continue
+        want = where[f]
+        # A None value means the caller did not filter on this field.
+        # DocumentMetadata.to_dict() emits a key for every filter field, so
+        # without this an unset filter would demand meta[f] is None and throw
+        # away every chunk that actually has a value. build_where_filter() on
+        # the Chroma side already skips them, and the two halves of the hybrid
+        # retriever have to agree.
+        if want is None:
+            continue
+        if meta.get(f) != want:
+            return False
     return True
 
 
