@@ -50,3 +50,19 @@ select = ["E", "F", "I", "B", "C4"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["rag", "cli"]
+
+[tool.coverage.run]
+# Without an explicit source, coverage measures whatever got imported, which
+# includes the test files themselves. They are ~100% covered by definition,
+# so the reported total came out flattering and meaningless.
+source = ["rag", "cli"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+]

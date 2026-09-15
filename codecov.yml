@@ -1,0 +1,19 @@
+# Coverage is reported, not enforced. The suite currently covers a little
+# under half the codebase, so a strict gate would block every PR while
+# saying nothing useful. Revisit the target once it climbs.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+comment:
+  layout: "reach, diff, flags"
+  require_changes: true
+
+ignore:
+  - "tests/**"
+  - "tools/**"
