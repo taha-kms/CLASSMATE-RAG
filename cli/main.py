@@ -270,7 +270,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
         print(json.dumps({"action": "query", "error": str(e)}), file=sys.stderr)
         return 1
 
-    # Note: res.sources is already a provenance list aligned with answer citations
+    # res.sources holds only what the answer cited, with n matching its [n] markers.
     output = {
         "action": "query",
         "question": res.question,
@@ -278,9 +278,13 @@ def cmd_ask(args: argparse.Namespace) -> int:
         "language": res.language,
         "top_k": res.top_k,
         "hybrid": res.hybrid,
-        "sources": [{"n": i + 1, "ref": ref} for i, ref in enumerate(res.sources)],
+        "grounded": res.grounded,
+        "sources": [{"n": s.n, "ref": s.ref} for s in res.sources],
         "filters": res.filters_applied,
     }
+    # Only present when the answer cited nothing, so a UI can show it muted.
+    if res.notice:
+        output["notice"] = res.notice
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 

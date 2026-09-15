@@ -130,3 +130,30 @@ rag reingest path/to/file.pdf
 * You can inspect `.env` to adjust model paths, embedding settings, and DB configuration.
 
 ---
+## Grounded and ungrounded answers
+
+`rag ask` reports whether the answer actually cited your material:
+
+```json
+{
+  "grounded": true,
+  "sources": [{ "n": 1, "ref": "/path/to/notes.md" }]
+}
+```
+
+`sources` lists only the blocks the answer cited, and `n` matches the `[n]`
+markers in the text, so a reader can follow a claim back to its source.
+
+When the model answers without citing anything, the answer is still
+returned, but with no sources and a short notice:
+
+```json
+{
+  "grounded": false,
+  "sources": [],
+  "notice": "From the model's own knowledge, not your documents."
+}
+```
+
+That case is common with small models, which often ignore the instruction
+to cite. Treat those answers as you would any ungrounded model output.
