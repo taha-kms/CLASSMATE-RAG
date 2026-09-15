@@ -247,7 +247,7 @@ def _concurrent_chunk_pages(
     Concurrent page-wise chunking using a bounded thread pool.
     Returns flattened (page, global_chunk_id, text) tuples. The chunk_id is
     reassigned globally, monotonically across all pages to keep deterministic
-    stable IDs. :contentReference[oaicite:4]{index=4}
+    stable IDs.
     """
     # 1) Chunk each page independently, in parallel
     results: Dict[int, List[str]] = {}
@@ -291,7 +291,7 @@ def ingest_file(
     Load a doc, chunk it (fast, concurrent), optionally deduplicate near-duplicates,
     embed with cache, and upsert to both stores.
 
-    Returns IngestResult with counts etc. :contentReference[oaicite:5]{index=5}
+    Returns IngestResult with counts etc.
     """
     cfg = load_config()
     p = Path(path).resolve()
@@ -476,7 +476,7 @@ def _looks_unknown(ans: str, lang: str) -> bool:
 def _needs_translation(answer: str, target_lang: str) -> bool:
     """
     Decide whether to run a quick translation pass while preserving [n] citations.
-    We only translate between EN/IT; other languages default to EN. :contentReference[oaicite:7]{index=7}
+    We only translate between EN/IT; other languages default to EN.
     """
     if not answer.strip():
         return False
@@ -487,7 +487,7 @@ def _needs_translation(answer: str, target_lang: str) -> bool:
 def _translate_text(text: str, target_lang: str, runner: Optional["LlamaCppRunner"] = None) -> str:
     """
     Translate to `target_lang` via the same local LLM runner, explicitly asking it to
-    preserve bracketed citations like [1], [2] exactly. :contentReference[oaicite:8]{index=8}
+    preserve bracketed citations like [1], [2] exactly.
     """
     if not text.strip():
         return text
@@ -529,7 +529,7 @@ def ask_question(
       3) Choose answer language (forced by filters.language if en/it, otherwise config).
       4) Build grounded messages (context blocks with [n]) and run local LLM.
       5) Optional: translate-on-miss (if LLM answered in the wrong language).
-      6) Optional: strict citations (enforce [n] usage and append sources list). :contentReference[oaicite:9]{index=9}
+      6) Optional: strict citations (enforce [n] usage and append sources list).
     """
     cfg = load_config()
 
