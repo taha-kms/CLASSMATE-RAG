@@ -13,4 +13,46 @@ services:
       - ANONYMIZED_TELEMETRY=FALSE
     volumes:
       - ./indexes/chroma:/chroma/chroma
+    healthcheck:
+      # curl is present in the image; wget and nc are not.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
+
+  rag:
+    build:
+      context: .
+      args:
+        # Match the host user so bind-mounted indexes do not come back owned
+        # by root. Not named UID: that is readonly in bash, so the obvious
+        # `UID=$(id -u) docker compose build` fails before docker runs.
+        #   CLASSMATE_UID=$(id -u) CLASSMATE_GID=$(id -g) docker compose build
+        UID: "${CLASSMATE_UID:-1000}"
+        GID: "${CLASSMATE_GID:-1000}"
+    image: classmate-rag:local
+    # The CLI is one-shot, so this is not started by `docker compose up`.
+    # Run it with:  docker compose run --rm rag ask "..." --course Maths
+    profiles: ["cli"]
+    depends_on:
+      chroma:
+        # Waiting for "started" is not enough: the container accepts no
+        # connections for a second or two after that, and the first query
+        # fails rather than the stack simply taking longer to come up.
+        condition: service_healthy
+    environment:
+      # Inside the compose network the database is reachable as `chroma`.
+      # `localhost` here would be this container, which is the mistake that
+      # costs an afternoon.
+      CHROMA_HTTP_URL: "http://chroma:8000"
+      HF_HOME: /app/models/hf_cache
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      HF_TOKEN: "${HF_TOKEN:-}"
+    volumes:
+      # Everything large or generated lives on the host. The image carries
+      # the application and nothing else.
+      - ./models:/app/models
+      - ./indexes:/app/indexes
+      - ./data:/app/data

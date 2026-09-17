@@ -182,8 +182,47 @@ and needs the host to have nvidia-container-toolkit installed.
 OCR is not included. `ENABLE_OCR=true` needs poppler-utils and tesseract-ocr,
 which are deliberately left out to keep the image small.
 
-Running the whole stack, application and Chroma together, comes with the
-compose setup.
+## Running the whole stack
+
+`docker compose` brings up the database and gives you the CLI against it:
+
+```bash
+docker compose up -d --wait chroma      # waits for it to be healthy, not just started
+docker compose run --rm rag stats
+docker compose run --rm rag add data/notes.pdf --course Maths --unit 3
+docker compose run --rm rag ask "What is the chain rule?" --course Maths
+```
+
+The `rag` service sits behind a `cli` profile, so `docker compose up` starts
+only the database. The CLI is one-shot and is meant to be run, not left
+running.
+
+### Matching your user
+
+The image runs as uid 1000. If yours differs, bind-mounted indexes come back
+owned by someone else:
+
+```bash
+CLASSMATE_UID=$(id -u) CLASSMATE_GID=$(id -g) docker compose build
+```
+
+Note the names. `UID` is readonly in bash, so the obvious
+`UID=$(id -u) docker compose build` fails before docker is even reached.
+
+### Talking to the database
+
+Inside compose the database is `http://chroma:8000`, not `localhost`.
+`localhost` in the application container is the application container. The
+compose file sets this for you; it only matters if you override it, and the
+failure is quiet:
+
+```
+vector_count with wrong host: -1
+bm25 count: 2
+```
+
+`-1` means "could not reach the vector store". A corpus that genuinely holds
+nothing reports `0`.
 
 ## Releases
 
