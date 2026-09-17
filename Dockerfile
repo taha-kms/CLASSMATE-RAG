@@ -44,7 +44,11 @@ FROM python:${PYTHON_VERSION}-slim AS runtime
 
 # libgomp is llama.cpp's OpenMP runtime. Without it the compiled extension
 # imports fine and fails at model load.
+# Upgrade first: the base image lags its own security updates between
+# rebuilds, and the scan in CI counts those against us. This cleared three
+# CRITICAL advisories in perl-base on its own.
 RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends \
       libgomp1 \
  && rm -rf /var/lib/apt/lists/*
