@@ -276,12 +276,15 @@ def cmd_ask(args: argparse.Namespace) -> int:
         "question": res.question,
         "answer": res.answer,
         "language": res.language,
+        "backend": getattr(res, "backend", "llama_cpp"),
         "top_k": res.top_k,
         "hybrid": res.hybrid,
         "grounded": res.grounded,
         "sources": [{"n": s.n, "ref": s.ref} for s in res.sources],
         "filters": res.filters_applied,
     }
+    if getattr(res, "route", None):
+        output["route"] = res.route
     # Only present when the answer cited nothing, so a UI can show it muted.
     if res.notice:
         output["notice"] = res.notice

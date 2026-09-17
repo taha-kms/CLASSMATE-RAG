@@ -14,6 +14,8 @@ export interface AskResponse {
   question: string;
   answer: string;
   language: string;
+  /** LLM generation backend (e.g. 'llama_cpp'). */
+  backend?: string;
   top_k: number;
   hybrid: boolean;
   /** False when the answer cited nothing, so it came from the model (#44). */

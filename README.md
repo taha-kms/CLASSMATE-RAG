@@ -8,7 +8,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 A **Retrieval-Augmented Generation (RAG)** system for course materials.
-It ingests documents (PDF, DOCX, PPTX, EPUB, HTML, CSV, TXT, MD), indexes them in **BM25** + **Chroma vector DB**, and answers questions with grounded citations using LLaMA/Mistral GGUF models.
+It ingests documents (PDF, DOCX, PPTX, EPUB, HTML, CSV, TXT, MD), indexes them in **BM25** + **Chroma vector DB**, and answers questions with grounded citations using local GGUF models (`llama.cpp` by default) or optional hosted providers.
 
 ---
 
@@ -17,10 +17,24 @@ It ingests documents (PDF, DOCX, PPTX, EPUB, HTML, CSV, TXT, MD), indexes them i
 * **CLI-first workflow** (`rag` command)
 * Ingestion with metadata (course, unit, tags, language, semester, author)
 * **Hybrid retrieval** (BM25 keyword + vector embeddings, fused with RRF)
-* **Cited answers** generated with local LLMs
+* **Cited answers** generated with local LLMs by default
+* **Privacy-preserving local default**: zero data leaves your machine unless a hosted provider is configured
 * **Admin tools**: stats, preview, backup/restore, vacuum, rebuild embeddings, reingest
 * **Document loaders**: PDF, DOCX, PPTX, EPUB, HTML, CSV, TXT, Markdown
 * **Multilingual support** with E5 embeddings (`intfloat/multilingual-e5-base`)
+
+---
+
+## 🔒 Data Privacy & Hosted Providers
+
+By default, CLASSMATE-RAG runs **completely locally and offline**:
+* Document processing, vector embeddings, and generation execute on your machine.
+* The default backend is `llama_cpp`, ensuring no coursework or user questions leave your device.
+
+When configuring or selecting a hosted backend (e.g. Anthropic, OpenAI, or Google):
+* **What leaves the machine:** Only the user's question and the retrieved text chunks/passages included in the prompt context are transmitted to the provider. The rest of your index and unretrieved corpus **never leave the machine**.
+* **Per-query cost:** Hosted providers charge based on token volume. In a RAG pipeline, retrieved document chunks in the context window make up the bulk of token usage and cost.
+* **Privacy by default:** `llama_cpp` remains the default backend so that the private option is what you get out of the box without manual configuration.
 
 ---
 
