@@ -62,10 +62,7 @@ def build_grounded_messages(
     Returns:
         A list of role/content dicts for the model
     """
-    sys = (
-        "You are a helpful assistant that answers questions "
-        "using the provided context. "
-    )
+    sys = "You are a helpful assistant that answers questions using the provided context. "
     if citations_required:
         sys += (
             "Include numeric citations [1], [2], ... "

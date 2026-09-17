@@ -35,20 +35,23 @@ __all__ = [
 # .classifier needs sentence-transformers and .loader needs llama_cpp. The
 # route types, prompts and registry are pure Python and stay reachable
 # without either.
-__getattr__, __dir__ = lazy_exports(__name__, {
-    "Route": ".types",
-    "RouteDecision": ".types",
-    "ROUTES": ".types",
-    "DEFAULT_ROUTE": ".types",
-    "SUBJECT_PROTOTYPES": ".prototypes",
-    "SubjectClassifier": ".classifier",
-    "HybridRouter": ".router",
-    "ModelSpec": ".registry",
-    "get_model_spec": ".registry",
-    "route_model_paths": ".registry",
-    "StickyModelLoader": ".loader",
-    "system_prompt_for": ".prompts",
-})
+__getattr__, __dir__ = lazy_exports(
+    __name__,
+    {
+        "Route": ".types",
+        "RouteDecision": ".types",
+        "ROUTES": ".types",
+        "DEFAULT_ROUTE": ".types",
+        "SUBJECT_PROTOTYPES": ".prototypes",
+        "SubjectClassifier": ".classifier",
+        "HybridRouter": ".router",
+        "ModelSpec": ".registry",
+        "get_model_spec": ".registry",
+        "route_model_paths": ".registry",
+        "StickyModelLoader": ".loader",
+        "system_prompt_for": ".prompts",
+    },
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from .classifier import SubjectClassifier

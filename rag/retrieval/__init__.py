@@ -15,13 +15,16 @@ __all__ = [
     "HybridRetriever",
 ]
 
-__getattr__, __dir__ = lazy_exports(__name__, {
-    "ChromaVectorStore": ".vector_chroma",
-    "build_where_filter": ".vector_chroma",
-    "BM25Store": ".bm25",
-    "rrf_fuse": ".fusion",
-    "HybridRetriever": ".fusion",
-})
+__getattr__, __dir__ = lazy_exports(
+    __name__,
+    {
+        "ChromaVectorStore": ".vector_chroma",
+        "build_where_filter": ".vector_chroma",
+        "BM25Store": ".bm25",
+        "rrf_fuse": ".fusion",
+        "HybridRetriever": ".fusion",
+    },
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from .bm25 import BM25Store

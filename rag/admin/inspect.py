@@ -22,6 +22,7 @@ from rag.retrieval.fusion import HybridRetriever
 # Helpers
 # ------------------------------
 
+
 def _du_bytes(path: Path) -> int:
     """Return disk usage (in bytes) of a file or directory."""
     if not path.exists():
@@ -41,6 +42,7 @@ def _du_bytes(path: Path) -> int:
 # ------------------------------
 # Public functions
 # ------------------------------
+
 
 def retrieve_preview(
     *,

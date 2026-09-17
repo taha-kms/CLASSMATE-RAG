@@ -40,7 +40,7 @@ def _math_prompt(language: str) -> str:
         "Risolvi problemi passo-passo, mostra i passaggi e giustifica brevemente."
         if language == "it"
         else "You are a mathematics tutor for university students. "
-             "Solve problems step-by-step, show the work, and briefly justify each step."
+        "Solve problems step-by-step, show the work, and briefly justify each step."
     )
     return f"{role}\n\n{_base_rules(language)}"
 
@@ -51,7 +51,7 @@ def _code_prompt(language: str) -> str:
         "spiega le scelte chiave e indica la complessità quando rilevante."
         if language == "it"
         else "You are a programming assistant. Provide correct, idiomatic code, "
-             "explain key design choices, and note time/space complexity when relevant."
+        "explain key design choices, and note time/space complexity when relevant."
     )
     return f"{role}\n\n{_base_rules(language)}"
 
@@ -75,11 +75,10 @@ def _translation_prompt(language: str) -> str:
 
 def _default_prompt(language: str) -> str:
     role = (
-        "Sei un assistente di studio per studenti universitari. "
-        "Rispondi in modo chiaro, ordinato e basato sulle fonti."
+        "Sei un assistente di studio per studenti universitari. Rispondi in modo chiaro, ordinato e basato sulle fonti."
         if language == "it"
         else "You are a study assistant for university students. "
-             "Answer clearly and concisely, grounded in the provided sources."
+        "Answer clearly and concisely, grounded in the provided sources."
     )
     return f"{role}\n\n{_base_rules(language)}"
 

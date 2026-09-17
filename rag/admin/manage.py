@@ -9,7 +9,7 @@ Provides functions to:
 - reingest files
 - list source paths
 
-BM25 JSONL file is used as the main catalog. 
+BM25 JSONL file is used as the main catalog.
 All operations are safe to repeat (idempotent).
 """
 
@@ -40,9 +40,11 @@ _BM25_JSONL = _BM25_DIR / "bm25_index.jsonl"
 # Data type
 # ------------------------------
 
+
 @dataclass(frozen=True)
 class CatalogEntry:
     """Represents one entry (chunk) in the BM25 catalog."""
+
     id: str
     text: str
     metadata: Dict[str, object]
@@ -51,6 +53,7 @@ class CatalogEntry:
 # ------------------------------
 # Internal helpers
 # ------------------------------
+
 
 def _read_bm25_catalog() -> List[CatalogEntry]:
     """Read BM25 catalog JSONL and return a list of entries."""
@@ -121,6 +124,7 @@ def _group_by_source(entries: Sequence[CatalogEntry]) -> Dict[str, List[CatalogE
 # ------------------------------
 # Public API
 # ------------------------------
+
 
 def list_entries(
     *,
@@ -212,6 +216,7 @@ def reingest_paths(paths: Sequence[str]) -> List[Dict[str, object]]:
         return []
 
     from rag.pipeline import ingest_file
+
     cat = _read_bm25_catalog()
     by_path = _group_by_source(cat)
 
@@ -249,21 +254,20 @@ def reingest_paths(paths: Sequence[str]) -> List[Dict[str, object]]:
         )
 
         res = ingest_file(path=str(p), doc_meta=doc_meta)
-        results.append({
-            "path": res.path,
-            "doc_type": res.doc_type,
-            "total_pages": res.total_pages,
-            "total_chunks": res.total_chunks,
-            "upserted": res.upserted,
-            "created_at": res.created_at,
-        })
+        results.append(
+            {
+                "path": res.path,
+                "doc_type": res.doc_type,
+                "total_pages": res.total_pages,
+                "total_chunks": res.total_chunks,
+                "upserted": res.upserted,
+                "created_at": res.created_at,
+            }
+        )
     return results
 
 
-def list_source_paths(
-    *,
-    where: Optional[Mapping[str, object]] = None
-) -> List[str]:
+def list_source_paths(*, where: Optional[Mapping[str, object]] = None) -> List[str]:
     """Return all unique source_path values matching a filter."""
     entries = list_entries(where=where)
     return _collect_source_paths(entries)

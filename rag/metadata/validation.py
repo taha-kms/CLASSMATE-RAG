@@ -39,17 +39,20 @@ _LANGS = {"en", "it", "auto"}
 
 _slug_re = re.compile(r"[^a-z0-9]+")
 
+
 def _slug_tag(t: str) -> str:
     s = (t or "").lower().strip()
     s = _slug_re.sub("_", s)
     s = s.strip("_")
     return s
 
+
 def _clean_str(v: Optional[str]) -> Optional[str]:
     if v is None:
         return None
     v2 = str(v).strip()
     return v2 or None
+
 
 def _norm_lang(v: Optional[str]) -> Optional[str]:
     if v is None:
@@ -62,6 +65,7 @@ def _norm_lang(v: Optional[str]) -> Optional[str]:
     if v in {"auto", "detect", "auto-detect"}:
         return "auto"
     return None  # unknown -> handled by validators
+
 
 def _norm_doc_type(v: Optional[str]) -> Optional[str]:
     if v is None:
@@ -79,6 +83,7 @@ def _norm_doc_type(v: Optional[str]) -> Optional[str]:
 
 
 # ---- models ----
+
 
 class _MetaInput(BaseModel):
     course: Optional[str] = None

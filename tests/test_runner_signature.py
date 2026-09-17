@@ -21,20 +21,22 @@ from rag.generation.llama_cpp_runner import LlamaCppRunner
 def _patched_runner():
     """Build a LlamaCppRunner with the heavy bits stubbed out."""
     fake_llama = MagicMock()
-    fake_llama.create_chat_completion.return_value = {
-        "choices": [{"message": {"content": "ok"}}]
-    }
+    fake_llama.create_chat_completion.return_value = {"choices": [{"message": {"content": "ok"}}]}
     fake_llama.return_value = {"choices": [{"text": "raw-ok"}]}
 
     # Llama is constructed in llama_backend, which both the runner and the
     # sticky loader now go through.
-    return patch.multiple(
-        "rag.generation.llama_backend",
-        Llama=MagicMock(return_value=fake_llama),
-    ), patch(
-        "rag.generation.llama_cpp_runner.ensure_llama_model_available",
-        MagicMock(return_value=Path("/tmp/dummy.gguf")),
-    ), fake_llama
+    return (
+        patch.multiple(
+            "rag.generation.llama_backend",
+            Llama=MagicMock(return_value=fake_llama),
+        ),
+        patch(
+            "rag.generation.llama_cpp_runner.ensure_llama_model_available",
+            MagicMock(return_value=Path("/tmp/dummy.gguf")),
+        ),
+        fake_llama,
+    )
 
 
 def test_runner_constructs_without_args_and_chat_works():

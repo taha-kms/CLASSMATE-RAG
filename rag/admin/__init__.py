@@ -15,5 +15,6 @@ __all__ = ["retrieve_preview", "index_stats"]
 def __getattr__(name: str) -> Any:
     if name in __all__:
         from .inspect import index_stats, retrieve_preview
+
         return {"retrieve_preview": retrieve_preview, "index_stats": index_stats}[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

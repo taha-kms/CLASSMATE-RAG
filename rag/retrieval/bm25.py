@@ -37,21 +37,176 @@ _TOKEN_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]+")
 
 # Minimal but effective stopword lists (can be extended later)
 _STOP_EN = {
-    "a","an","the","and","or","but","if","then","else","for","to","of","in","on","at","by","with",
-    "from","as","is","are","was","were","be","been","being","it","its","this","that","these","those",
-    "i","you","he","she","we","they","them","his","her","their","my","your","our","me","us",
-    "not","no","yes","do","does","did","doing","can","could","should","would","may","might","will","shall",
-    "about","into","over","under","again","further","there","here","when","where","why","how","what","which","who","whom",
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "but",
+    "if",
+    "then",
+    "else",
+    "for",
+    "to",
+    "of",
+    "in",
+    "on",
+    "at",
+    "by",
+    "with",
+    "from",
+    "as",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "it",
+    "its",
+    "this",
+    "that",
+    "these",
+    "those",
+    "i",
+    "you",
+    "he",
+    "she",
+    "we",
+    "they",
+    "them",
+    "his",
+    "her",
+    "their",
+    "my",
+    "your",
+    "our",
+    "me",
+    "us",
+    "not",
+    "no",
+    "yes",
+    "do",
+    "does",
+    "did",
+    "doing",
+    "can",
+    "could",
+    "should",
+    "would",
+    "may",
+    "might",
+    "will",
+    "shall",
+    "about",
+    "into",
+    "over",
+    "under",
+    "again",
+    "further",
+    "there",
+    "here",
+    "when",
+    "where",
+    "why",
+    "how",
+    "what",
+    "which",
+    "who",
+    "whom",
 }
 
 _STOP_IT = {
-    "un","uno","una","le","la","il","lo","gli","i","l","e","o","ma","se","allora","altrimenti","per","di",
-    "a","da","in","su","con","come","è","era","sono","siamo","siete","fui","fu","furono","essere","stato",
-    "questo","questa","questi","queste","quello","quella","quelli","quelle","ciò","cio","io","tu","lui","lei","noi","voi","loro",
-    "mio","mia","tuo","tua","suo","sua","nostro","vostro","non","no","si","sia","fare","fa","fatto","posso","può","puo",
-    "puoi","possono","dovrebbe","potrebbe","sarà","sara","sarebbe","saremmo","sarete","siano","che","perché","perche",
-    "quando","dove","cosa","quale","chi",
+    "un",
+    "uno",
+    "una",
+    "le",
+    "la",
+    "il",
+    "lo",
+    "gli",
+    "i",
+    "l",
+    "e",
+    "o",
+    "ma",
+    "se",
+    "allora",
+    "altrimenti",
+    "per",
+    "di",
+    "a",
+    "da",
+    "in",
+    "su",
+    "con",
+    "come",
+    "è",
+    "era",
+    "sono",
+    "siamo",
+    "siete",
+    "fui",
+    "fu",
+    "furono",
+    "essere",
+    "stato",
+    "questo",
+    "questa",
+    "questi",
+    "queste",
+    "quello",
+    "quella",
+    "quelli",
+    "quelle",
+    "ciò",
+    "cio",
+    "io",
+    "tu",
+    "lui",
+    "lei",
+    "noi",
+    "voi",
+    "loro",
+    "mio",
+    "mia",
+    "tuo",
+    "tua",
+    "suo",
+    "sua",
+    "nostro",
+    "vostro",
+    "non",
+    "no",
+    "si",
+    "sia",
+    "fare",
+    "fa",
+    "fatto",
+    "posso",
+    "può",
+    "puo",
+    "puoi",
+    "possono",
+    "dovrebbe",
+    "potrebbe",
+    "sarà",
+    "sara",
+    "sarebbe",
+    "saremmo",
+    "sarete",
+    "siano",
+    "che",
+    "perché",
+    "perche",
+    "quando",
+    "dove",
+    "cosa",
+    "quale",
+    "chi",
 }
+
 
 def _choose_stopwords(lang_hint: Optional[str]) -> set[str]:
     lang = (lang_hint or "").lower()
@@ -61,6 +216,7 @@ def _choose_stopwords(lang_hint: Optional[str]) -> set[str]:
         return _STOP_EN
     # unknown → default to EN but allow detection per-doc
     return _STOP_EN
+
 
 def _tokenize(text: str, lang_hint: Optional[str] = None) -> List[str]:
     """
@@ -77,6 +233,7 @@ def _tokenize(text: str, lang_hint: Optional[str] = None) -> List[str]:
 # ---------------------------
 
 _FILTER_SIMPLE_FIELDS = ["course", "unit", "language", "doc_type", "author", "semester"]
+
 
 def _matches_filter(meta: Mapping[str, Any], where: Optional[Mapping[str, Any]]) -> bool:
     """
@@ -123,6 +280,7 @@ def _matches_filter(meta: Mapping[str, Any], where: Optional[Mapping[str, Any]])
 # BM25 Store
 # ---------------------------
 
+
 @dataclass
 class _Entry:
     id: str
@@ -140,11 +298,12 @@ class BM25Store:
       {"id": "...", "text": "...", "tokens": [...], "metadata": {...}}
     We rebuild BM25Okapi from tokens on load.
     """
+
     index_dir: Path = field(default_factory=lambda: load_config().bm25_directory)
     index_file: str = "bm25_index.jsonl"
 
-    _entries: Dict[str, _Entry] = field(default_factory=dict)     # id -> entry
-    _id_list: List[str] = field(default_factory=list)             # order for BM25
+    _entries: Dict[str, _Entry] = field(default_factory=dict)  # id -> entry
+    _id_list: List[str] = field(default_factory=list)  # order for BM25
     _bm25: Optional[BM25Okapi] = None
 
     # ---------- Core ops ----------

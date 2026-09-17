@@ -22,6 +22,7 @@ from rag.config import load_config
 
 def _slug_tag(t: str) -> str:
     import re
+
     s = (t or "").lower().strip()
     s = re.sub(r"[^a-z0-9]+", "_", s)
     return s.strip("_")
@@ -90,6 +91,7 @@ class ChromaVectorStore:
 
     def _import_chromadb(self):
         import importlib
+
         return importlib.import_module("chromadb")
 
     @staticmethod
@@ -112,6 +114,7 @@ class ChromaVectorStore:
             host, port = "localhost", 8000
             try:
                 from urllib.parse import urlparse
+
                 parsed = urlparse(http_url)
                 if parsed.hostname:
                     host = parsed.hostname
@@ -186,10 +189,10 @@ class ChromaVectorStore:
 
         # Add batches
         for i in range(0, len(ids), batch_size):
-            batch_ids = list(ids[i:i + batch_size])
-            batch_docs = list(documents[i:i + batch_size])
-            batch_meta = list(metadatas[i:i + batch_size])
-            batch_emb = embeddings[i:i + batch_size]
+            batch_ids = list(ids[i : i + batch_size])
+            batch_docs = list(documents[i : i + batch_size])
+            batch_meta = list(metadatas[i : i + batch_size])
+            batch_emb = embeddings[i : i + batch_size]
             col.add(
                 ids=batch_ids,
                 documents=batch_docs,

@@ -5,8 +5,18 @@ import pytest
 from cli.main import build_parser
 
 SUBCOMMANDS = {
-    "add", "ask", "preview", "stats", "dump", "restore", "vacuum",
-    "rebuild", "list", "show", "delete", "reingest",
+    "add",
+    "ask",
+    "preview",
+    "stats",
+    "dump",
+    "restore",
+    "vacuum",
+    "rebuild",
+    "list",
+    "show",
+    "delete",
+    "reingest",
 }
 
 
@@ -44,16 +54,26 @@ def test_all_subcommands_are_registered():
 
 
 def test_add_flags_present():
-    ns = _parse([
-        "add", "doc.pdf",
-        "--course", "cs50",
-        "--unit", "1",
-        "--language", "en",
-        "--doc-type", "pdf",
-        "--author", "Alice",
-        "--semester", "2025S",
-        "--tags", "exam,week1",
-    ])
+    ns = _parse(
+        [
+            "add",
+            "doc.pdf",
+            "--course",
+            "cs50",
+            "--unit",
+            "1",
+            "--language",
+            "en",
+            "--doc-type",
+            "pdf",
+            "--author",
+            "Alice",
+            "--semester",
+            "2025S",
+            "--tags",
+            "exam,week1",
+        ]
+    )
     assert ns.path == "doc.pdf"
     assert ns.course == "cs50"
     assert ns.unit == "1"
@@ -104,4 +124,5 @@ def test_pyproject_declares_the_rag_console_script():
 
 def test_console_script_target_is_callable():
     from cli.main import main
+
     assert callable(main)
