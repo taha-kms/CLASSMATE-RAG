@@ -186,15 +186,15 @@ def delete_by_ids(ids: Sequence[str]) -> Tuple[int, int]:
         return (0, 0)
 
     from rag.retrieval import BM25Store, ChromaVectorStore
+
+    # Both counts are what the stores removed. Nothing is caught here: a
+    # delete that fails has to look like a failure, because this is how
+    # someone removes material they did not mean to ingest.
     vec = ChromaVectorStore.from_config()
-    n_vec = 0
-    try:
-        n_vec = vec.delete(ids=list(ids)) or 0
-    except Exception:
-        n_vec = len(ids)
+    n_vec = vec.delete(ids=list(ids))
 
     bm = BM25Store.load_or_create(str(_BM25_DIR))
-    n_bm25 = bm.delete_many(ids=list(ids))
+    n_bm25 = bm.delete_many(list(ids))
     bm.save()
 
     return (n_vec, n_bm25)

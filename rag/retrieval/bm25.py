@@ -181,10 +181,14 @@ class BM25Store:
         """Number of documents currently indexed."""
         return len(self._entries)
 
-    def delete_many(self, ids: Sequence[str]) -> None:
+    def delete_many(self, ids: Sequence[str]) -> int:
+        """Remove ids and return how many were actually present."""
+        removed = 0
         for doc_id in ids:
-            self._entries.pop(doc_id, None)
+            if self._entries.pop(doc_id, None) is not None:
+                removed += 1
         self._rebuild()
+        return removed
 
     # ---------- Query ----------
 
