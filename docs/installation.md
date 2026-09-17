@@ -252,6 +252,28 @@ bm25 count: 2
 `-1` means "could not reach the vector store". A corpus that genuinely holds
 nothing reports `0`.
 
+## Pulling a prebuilt image
+
+Building locally means compiling llama-cpp-python, which is the part that
+takes minutes and needs a toolchain. Pulling avoids it:
+
+```bash
+docker pull ghcr.io/taha-kms/classmate-rag:main
+```
+
+| Tag | What it is |
+| --- | --- |
+| `:main` | the latest commit on main, rebuilt on every push |
+| `:sha-<commit>` | one specific commit, if you need to pin |
+| `:0.2.0`, `:latest` | published from a version tag, see below |
+
+`:main` moves. Pin to a version tag or a `sha-` tag if you want something
+that does not change under you.
+
+Every published image has already passed the smoke test and the
+vulnerability scan in CI, and is the same artefact those checks ran
+against rather than a rebuild of it.
+
 ## Releases
 
 Tagging a version builds the image, pushes it to GHCR and creates a GitHub
