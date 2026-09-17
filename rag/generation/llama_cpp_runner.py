@@ -13,10 +13,16 @@ configured model via `rag.config.load_config()` and downloads it on demand via
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 from rag.config import load_config
-from rag.generation.llama_backend import chat_completion, load_llama, require_llama
+from rag.generation.llama_backend import (
+    chat_completion,
+    chat_completion_stream,
+    load_llama,
+    require_llama,
+)
 from rag.model_fetch import ensure_llama_model_available
 
 
@@ -67,6 +73,27 @@ class LlamaCppRunner:
     ) -> str:
         """Run an OpenAI-style chat completion and return the assistant text."""
         return chat_completion(
+            self.model,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            repeat_penalty=repeat_penalty,
+            stop=stop,
+        )
+
+    def chat_stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int = 768,
+        temperature: float = 0.2,
+        top_p: float = 0.95,
+        repeat_penalty: float = 1.0,
+        stop: list[str] | None = None,
+    ) -> Iterator[str]:
+        """Same as chat(), yielding the answer as it is produced."""
+        return chat_completion_stream(
             self.model,
             messages,
             max_tokens=max_tokens,

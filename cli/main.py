@@ -241,12 +241,46 @@ def cmd_add(args: argparse.Namespace) -> int:
     return 0
 
 
+def _ask_streaming(events):
+    """
+    Show the answer as it is written, then return the finished result.
+
+    Progress goes to stderr so the JSON on stdout stays parseable: piping
+    into jq keeps working with --stream.
+    """
+    from rag.generation.stream import FinalEvent, ReplaceEvent, StageEvent, TokenEvent
+
+    final = None
+    wrote_any = False
+
+    for event in events:
+        if isinstance(event, StageEvent):
+            print(f"[{event.message}]", file=sys.stderr, flush=True)
+        elif isinstance(event, TokenEvent):
+            print(event.text, end="", file=sys.stderr, flush=True)
+            wrote_any = True
+        elif isinstance(event, ReplaceEvent):
+            # What was shown is being withdrawn, not continued.
+            if wrote_any:
+                print("", file=sys.stderr)
+            print("[no answer in your documents; answering without them]", file=sys.stderr, flush=True)
+            wrote_any = False
+        elif isinstance(event, FinalEvent):
+            final = event.result
+
+    if wrote_any:
+        print("", file=sys.stderr)
+    if final is None:
+        raise RuntimeError("the answer stream ended without a result")
+    return final
+
+
 def cmd_ask(args: argparse.Namespace) -> int:
     """
     Run a hybrid retrieval + generation cycle for a natural language question.
     Filters narrow the corpus by metadata (course/unit/author/tags/etc.).
     """
-    from rag.pipeline import ask_question
+    from rag.pipeline import ask_question, ask_question_stream
 
     question = args.question.strip()
     if not question:
@@ -259,12 +293,22 @@ def cmd_ask(args: argparse.Namespace) -> int:
     # CLI uses "on"/"off" for hybrid; pipeline expects a bool
     hybrid = args.hybrid == "on"
     try:
-        res = ask_question(
-            question=question,
-            filters=meta_filters,
-            top_k=int(args.k),
-            hybrid=hybrid,
-        )
+        if args.stream:
+            res = _ask_streaming(
+                ask_question_stream(
+                    question=question,
+                    filters=meta_filters,
+                    top_k=int(args.k),
+                    hybrid=hybrid,
+                )
+            )
+        else:
+            res = ask_question(
+                question=question,
+                filters=meta_filters,
+                top_k=int(args.k),
+                hybrid=hybrid,
+            )
     except Exception as e:
         print(json.dumps({"action": "query", "error": str(e)}), file=sys.stderr)
         return 1
@@ -748,6 +792,11 @@ def build_parser() -> argparse.ArgumentParser:
     # --- ask ---
     pq = sub.add_parser("ask", help="Ask a question with optional metadata filters")
     pq.add_argument("question", help="The user question in English or Italian (use quotes)")
+    pq.add_argument(
+        "--stream",
+        action="store_true",
+        help="Show the answer as it is written; progress goes to stderr",
+    )
     pq.add_argument("--course", type=str, help="Filter by course")
     pq.add_argument("--unit", type=str, help="Filter by unit/module")
     pq.add_argument(

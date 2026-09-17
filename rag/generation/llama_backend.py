@@ -14,6 +14,7 @@ into a string.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +72,45 @@ def load_llama(
         seed=int(seed),
         verbose=bool(verbose),
     )
+
+
+def chat_completion_stream(
+    llm: Any,
+    messages: list[dict[str, str]],
+    *,
+    max_tokens: int = 768,
+    temperature: float = 0.2,
+    top_p: float = 0.95,
+    repeat_penalty: float = 1.0,
+    stop: list[str] | None = None,
+) -> Iterator[str]:
+    """
+    Run a chat completion and yield the text as it arrives.
+
+    llama.cpp emits OpenAI-shaped chunks. The first carries the role and no
+    content, the last carries finish_reason and often no content either, and
+    any chunk may have an empty delta, so every access is guarded and empty
+    pieces are skipped rather than yielded as blank tokens.
+    """
+    stream = llm.create_chat_completion(
+        messages=messages,
+        max_tokens=int(max_tokens),
+        temperature=float(temperature),
+        top_p=float(top_p),
+        repeat_penalty=float(repeat_penalty),
+        stop=stop,
+        stream=True,
+    )
+
+    for chunk in stream:
+        try:
+            piece = chunk["choices"][0]["delta"].get("content")
+        except (KeyError, IndexError, TypeError, AttributeError):
+            # A malformed chunk should not end the answer; the stream may
+            # well continue with usable ones.
+            continue
+        if piece:
+            yield piece
 
 
 def chat_completion(

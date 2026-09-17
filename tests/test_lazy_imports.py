@@ -40,6 +40,15 @@ def test_module_imports_without_the_ml_stack(name):
     importlib.import_module(name)
 
 
+def test_eagerly_exporting_packages_actually_have_what_they_advertise():
+    # rag.pipeline imports its names directly rather than lazily, so a name
+    # in __all__ that was never imported is an ImportError for every caller
+    # and nothing catches it until someone tries.
+    module = importlib.import_module("rag.pipeline")
+    missing = [name for name in module.__all__ if not hasattr(module, name)]
+    assert not missing, f"rag.pipeline advertises {missing} but does not define them"
+
+
 def test_the_public_packages_know_every_name_they_advertise():
     # Deliberately not hasattr: resolving LlamaCppRunner would import
     # llama_cpp, which is the very thing being avoided. dir() goes through
