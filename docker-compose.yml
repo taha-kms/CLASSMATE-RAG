@@ -33,6 +33,11 @@ services:
         UID: "${CLASSMATE_UID:-1000}"
         GID: "${CLASSMATE_GID:-1000}"
     image: classmate-rag:local
+    # Run as the host user so files written into the bind mounts are owned by
+    # whoever started the container. This is a runtime override, so a machine
+    # whose uid is not 1000 does not need to rebuild; the build args above
+    # only set the default baked into the image.
+    user: "${CLASSMATE_UID:-1000}:${CLASSMATE_GID:-1000}"
     # The CLI is one-shot, so this is not started by `docker compose up`.
     # Run it with:  docker compose run --rm rag ask "..." --course Maths
     profiles: ["cli"]
