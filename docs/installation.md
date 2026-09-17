@@ -275,3 +275,89 @@ docker pull ghcr.io/taha-kms/classmate-rag:latest
 ```
 
 A tag containing a hyphen, `v0.2.0-rc1`, is published as a pre-release.
+
+## Building a CUDA image yourself
+
+The published image is CPU-only, deliberately. `llama-cpp-python` has to be
+**compiled** with CUDA support; it is not a runtime switch, so a GPU image
+is a separate build of roughly 5 GB that is useless without
+nvidia-container-toolkit installed on the host. One CPU image that runs
+everywhere is the better default, and a hosted backend gives you speed
+without a GPU at all.
+
+If you do want to build one, read the next section first. It is often not
+worth the afternoon.
+
+### Is it worth it on your card
+
+Fully offloading a 7B Q4_K_M needs about 4.4 GB of VRAM, plus room for the
+context window:
+
+| VRAM | Realistic outcome |
+| --- | --- |
+| under 4 GB | do not bother. Stay on CPU or use a hosted backend |
+| 4-6 GB | partial offload only. Faster than CPU, not dramatically |
+| 8 GB+ | one 7B Q4 fully offloaded, one at a time |
+| 16 GB+ | comfortable, and the only range where subject routing makes sense |
+
+Check what you have:
+
+```bash
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+```
+
+### Host prerequisite
+
+The host needs nvidia-container-toolkit, and this is the step most people
+get stuck on. Docker alone cannot pass a GPU through. Verify it works
+before building anything:
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+```
+
+If that prints your card, you are ready. If it errors, fix that first,
+because nothing below will work until it does.
+
+### The build
+
+Two changes to the Dockerfile. Use a CUDA devel base for the builder stage
+so `nvcc` is present, and set `CMAKE_ARGS` before installing
+llama-cpp-python so it compiles the CUDA backend:
+
+```dockerfile
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04 AS builder
+# ... python, build-essential, cmake ...
+ENV CMAKE_ARGS="-DGGML_CUDA=on"
+RUN pip install --no-cache-dir llama-cpp-python
+```
+
+The runtime stage needs a CUDA runtime base rather than `python:slim`, so
+the CUDA shared libraries are present.
+
+Install `requirements-gpu.txt` rather than `requirements-cpu.txt`, or torch
+arrives as the CPU build and the GPU sits idle for the embedding step.
+
+### Running it
+
+Give the container the GPU and tell llama.cpp how much to offload:
+
+```yaml
+services:
+  rag:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      LLAMA_GPU_LAYERS: "20"
+      ROUTE_N_GPU_LAYERS: "20"
+```
+
+`-1` means every layer. It is the setting most likely to fail, and it fails
+late, partway through loading, on exactly the machines that cannot afford
+the wait. Start with a number well below the layer count and raise it until
+the model stops fitting.
