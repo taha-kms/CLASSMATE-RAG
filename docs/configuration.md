@@ -358,3 +358,28 @@ Routing helps when the subjects are genuinely different and you have the
 disk and memory for several specialist models. On a laptop it usually is
 not worth 18 GB, and one good general model on the default route is the
 better trade. A hosted backend avoids the question entirely.
+
+## Credentials
+
+API keys are not ordinary settings and are not stored in `.env`.
+
+```bash
+rag config set ANTHROPIC_API_KEY sk-ant-...
+rag config get ANTHROPIC_API_KEY     # ********1234
+```
+
+They go in `.secrets.env`, written `0600` and gitignored. Reads give a
+masked form: enough to tell which key is configured, not enough to use it.
+Nothing returns a stored credential in full, so one cannot end up in a
+screenshot, a shell history or a bug report by someone simply asking what
+is set.
+
+Precedence is the same as every other setting: a variable exported in your
+shell beats the stored one, so a one-off override works.
+
+The file lives in the project rather than the image, so a container mounts
+it and `docker rm` does not lose it, and no image layer ever contains a
+credential.
+
+If a key does reach a file it should not, the gitleaks check in CI covers
+Anthropic, OpenAI, Hugging Face and Google shapes.

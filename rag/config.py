@@ -216,6 +216,23 @@ class Config:
 __CONFIG_SINGLETON: Config | None = None
 
 
+def _read_secret_setting(*names: str) -> str | None:
+    """
+    First non-empty value among `names`, checking the environment before the
+    credential store.
+
+    Imported lazily: rag.secrets imports from here, and doing it at module
+    scope would be circular.
+    """
+    from rag.secrets import read_secret
+
+    for name in names:
+        value = read_secret(name)
+        if value:
+            return value
+    return None
+
+
 def load_config(reload: bool = False) -> Config:
     """
     Load configuration from environment and .env (once) with defaults.
@@ -237,9 +254,9 @@ def load_config(reload: bool = False) -> Config:
             _getenv_str("LLM_MODEL_PATH", "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf")
             or "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf"
         ),
-        hf_token=_getenv_str("HF_TOKEN")
-        or _getenv_str("HUGGINGFACE_HUB_TOKEN")
-        or _getenv_str("CLASSMATE_RAG_HF_TOKEN"),
+        # Environment first, then the credential store. Reading it here
+        # keeps every caller on one precedence rule (#48, #95).
+        hf_token=_read_secret_setting("HF_TOKEN", "HUGGINGFACE_HUB_TOKEN", "CLASSMATE_RAG_HF_TOKEN"),
         llm_repo_id=_getenv_str("LLM_REPO_ID"),
         llm_filename=_getenv_str("LLM_FILENAME"),
         chroma_persist_directory=resolve_data_path(

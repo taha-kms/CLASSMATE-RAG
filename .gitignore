@@ -20,3 +20,6 @@ web/node_modules/
 web/dist/
 web/playwright-report/
 web/test-results/
+
+# Credential store written by `rag config set`.
+.secrets.env
