@@ -18,6 +18,11 @@ jobs:
     name: Build and smoke test the image
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      # upload-sarif writes the scan results into the Security tab.
+      security-events: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,6 +84,49 @@ jobs:
           docker run --rm --entrypoint python classmate-rag:ci -c \
             "from rag.config import load_config; c = load_config(); assert str(c.bm25_directory) == '/app/indexes/bm25', c.bm25_directory; print(c.bm25_directory)"
           echo "::endgroup::"
+
+      - name: Scan the image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: classmate-rag:ci
+          format: sarif
+          output: trivy-results.sarif
+          # OS packages and language dependencies both. The torch and CUDA
+          # runtime surface is large and none of it is ours.
+          scanners: vuln,secret
+          # Report only. A python:slim base accumulates advisories that stay
+          # unfixable until upstream rebuilds, and failing the build on those
+          # trains people to ignore it. Gate once the noise level is known.
+          exit-code: "0"
+          ignore-unfixed: false
+
+      - name: Upload results to the Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      - name: Summarise findings
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, collections
+          p = pathlib.Path("trivy-results.sarif")
+          if not p.exists():
+              print("no sarif produced"); raise SystemExit(0)
+          rules = {}
+          for run in json.loads(p.read_text()).get("runs", []):
+              for r in run.get("tool", {}).get("driver", {}).get("rules", []):
+                  rules[r["id"]] = (r.get("properties", {}) or {}).get("security-severity", "0")
+              counts = collections.Counter()
+              for res in run.get("results", []):
+                  sev = float(rules.get(res.get("ruleId"), 0) or 0)
+                  band = "critical" if sev >= 9 else "high" if sev >= 7 else "medium" if sev >= 4 else "low"
+                  counts[band] += 1
+              total = sum(counts.values())
+              print(f"trivy findings: {total}  " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+          PY
 
       - name: Report image size
         run: |
