@@ -334,6 +334,61 @@ def cmd_preview(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_model(args: argparse.Namespace) -> int:
+    """`rag model list` and `rag model download`."""
+    from rag.model_download import (
+        DownloadError,
+        download_model,
+        download_profile,
+        list_local_models,
+        models_dir,
+    )
+
+    if args.model_command == "list":
+        models = list_local_models()
+        print(
+            json.dumps(
+                {
+                    "action": "model.list",
+                    "directory": str(models_dir()),
+                    "models": [{"file": m.path.name, "size_gb": m.size_gb} for m in models],
+                    "total_gb": round(sum(m.size_gb for m in models), 2),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    try:
+        if args.profile:
+            paths = download_profile(args.profile)
+        else:
+            if not (args.repo and args.file):
+                print(
+                    "ERROR: give --profile, or both --repo and --file",
+                    file=sys.stderr,
+                )
+                return 2
+            paths = [download_model(args.repo, args.file)]
+    except DownloadError as e:
+        # Already phrased as advice; printing the traceback would bury it.
+        print(json.dumps({"action": "model.download", "error": str(e)}), file=sys.stderr)
+        return 1
+
+    print(
+        json.dumps(
+            {
+                "action": "model.download",
+                "downloaded": [str(p) for p in paths],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 def cmd_profiles(_args: argparse.Namespace) -> int:
     """
     Show the model profiles and which of them this machine can actually run.
@@ -750,6 +805,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show model profiles and which fit this machine",
     )
     pp.set_defaults(func=cmd_profiles)
+
+    pm = sub.add_parser("model", help="List or download GGUF model files")
+    pmsub = pm.add_subparsers(dest="model_command", required=True)
+
+    pmsub.add_parser("list", help="Show the model files already downloaded")
+
+    pmd = pmsub.add_parser("download", help="Download a model, or everything a profile needs")
+    pmd.add_argument("--profile", help="Download every model this profile uses (light/balanced/heavy)")
+    pmd.add_argument("--repo", help="Hugging Face repo id, e.g. Qwen/Qwen2.5-3B-Instruct-GGUF")
+    pmd.add_argument("--file", help="Filename within the repo, e.g. qwen2.5-3b-instruct-q4_k_m.gguf")
+    pm.set_defaults(func=cmd_model)
 
     ps = sub.add_parser("stats", help="Show index health and disk usage")
     ps.set_defaults(func=cmd_stats)

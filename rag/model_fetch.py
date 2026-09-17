@@ -51,7 +51,10 @@ def ensure_llama_model_available() -> Path:
         )
 
     model_path = Path(model_path_str).expanduser().resolve()
-    models_dir = Path("./models").resolve()
+    # Resolved against the project root, not the working directory (#15).
+    from rag.model_download import models_dir as _models_dir
+
+    models_dir = _models_dir()
 
     # If the file already exists, we're done.
     if model_path.exists() and model_path.is_file():

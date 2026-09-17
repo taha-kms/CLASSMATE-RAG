@@ -315,7 +315,20 @@ docker compose run --rm rag stats
 So you can ingest a corpus and confirm retrieval is sensible before
 committing to a download.
 
-To answer questions, put a `.gguf` in `./models` and point at it:
+The quickest route is to let a profile choose:
+
+```bash
+rag profiles                      # what fits this machine
+rag model download --profile light
+rag model list                    # what is already here
+```
+
+Downloads report their size before starting, show progress, resume if
+interrupted, and refuse up front when there is not enough disk rather than
+failing at 95%.
+
+To pick a specific model instead, put a `.gguf` in `./models` and point at
+it:
 
 ```bash
 # in .env
