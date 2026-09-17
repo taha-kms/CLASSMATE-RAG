@@ -22,6 +22,8 @@ jobs:
       contents: read
       # upload-sarif writes the scan results into the Security tab.
       security-events: write
+      # pushing :main to GHCR, on push events only
+      packages: write
 
     steps:
       - name: Checkout
@@ -30,12 +32,21 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Log in to GHCR
+        # Only on main. A pull request from a fork has no write access, and a
+        # pull request from a branch should not be able to publish anything.
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build
         uses: docker/build-push-action@v6
         with:
           context: .
-          # Load into the local daemon so the smoke test can run it. Pushing
-          # is the release workflow's job, not this one's.
+          # Load into the local daemon so the smoke test can run it below.
           load: true
           push: false
           tags: classmate-rag:ci
@@ -127,6 +138,24 @@ jobs:
               total = sum(counts.values())
               print(f"trivy findings: {total}  " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
           PY
+
+      # Publish the image that was just smoke tested, by retagging it rather
+      # than building again. A second build could produce something subtly
+      # different from the artefact the checks above passed against, and a
+      # broken image on :main is worse than no :main tag at all.
+      #
+      # GHCR rejects uppercase paths and this repository is CLASSMATE-RAG,
+      # so the name is lowercased here.
+      - name: Publish :main
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY,,}"
+          for tag in "main" "sha-${GITHUB_SHA}"; do
+            docker tag classmate-rag:ci "ghcr.io/${repo}:${tag}"
+            docker push "ghcr.io/${repo}:${tag}"
+          done
+          echo "published ghcr.io/${repo}:main and :sha-${GITHUB_SHA}"
 
       - name: Report image size
         run: |
