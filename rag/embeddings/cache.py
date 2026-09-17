@@ -21,9 +21,11 @@ from rag.config import load_config
 # Helpers
 # ------------------------------
 
+
 def _sha1_bytes(data: bytes) -> str:
     """Return SHA1 hash of raw bytes as hex string."""
     return hashlib.sha1(data).hexdigest()
+
 
 def _norm_bytes(s: str) -> bytes:
     """Normalize text for hashing (strip spaces, keep case and punctuation)."""
@@ -33,6 +35,7 @@ def _norm_bytes(s: str) -> bytes:
 # ------------------------------
 # Cache wrapper
 # ------------------------------
+
 
 class CachingEmbedder:
     """

@@ -43,11 +43,7 @@ def ensure_llama_model_available() -> Path:
     model_path_str = _read_env("LLM_MODEL_PATH")
     repo_id = _read_env("LLM_REPO_ID")
     filename = _read_env("LLM_FILENAME")
-    token = (
-        _read_env("HF_TOKEN")
-        or _read_env("HUGGINGFACE_HUB_TOKEN")
-        or _read_env("CLASSMATE_RAG_HF_TOKEN")
-    )
+    token = _read_env("HF_TOKEN") or _read_env("HUGGINGFACE_HUB_TOKEN") or _read_env("CLASSMATE_RAG_HF_TOKEN")
 
     if not model_path_str:
         raise RuntimeError(
@@ -105,8 +101,7 @@ def ensure_llama_model_available() -> Path:
             candidate = matches[0]
         else:
             raise RuntimeError(
-                f"Downloaded file '{filename}' not found under {models_dir}. "
-                "Please verify LLM_FILENAME."
+                f"Downloaded file '{filename}' not found under {models_dir}. Please verify LLM_FILENAME."
             )
 
     # If LLM_MODEL_PATH points elsewhere, return the actual downloaded path.

@@ -112,6 +112,7 @@ class ChunkMetadata:
 
 # --- Normalization helpers ---
 
+
 def _clean_str(v: Optional[str]) -> Optional[str]:
     if v is None:
         return None

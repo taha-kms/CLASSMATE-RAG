@@ -8,12 +8,13 @@ def test_validate_cli_metadata_fixup_false_rejects_bad_tag():
     with pytest.raises(ValueError):
         validate_cli_metadata(raw, fixup=False)
 
+
 def test_validate_cli_metadata_fixup_true_slugifies_and_infers_doc_type():
     raw = {
         "course": "  Math101 ",
         "unit": "  1 ",
         "language": "English",
-        "doc_type": None,       # will be inferred when provided
+        "doc_type": None,  # will be inferred when provided
         "author": "  Prof. X ",
         "semester": " 2025S ",
         "tags": "Exam Week 1,  tricky-Tag  ",
@@ -27,13 +28,15 @@ def test_validate_cli_metadata_fixup_true_slugifies_and_infers_doc_type():
     # language coerced to 'auto' during permissive path then normalized later
     assert cleaned["doc_type"] == "pdf"
     # slugged and deduped tags (lower/snake-ish)
-    assert cleaned["tags"] and all(t.replace("_","").isalnum() for t in cleaned["tags"])
+    assert cleaned["tags"] and all(t.replace("_", "").isalnum() for t in cleaned["tags"])
+
 
 def test_validate_cli_metadata_bad_doc_type_behavior():
     raw = {"doc_type": "pptzzz"}
 
     # STRICT path: should error on unknown doc_type
     import pytest
+
     with pytest.raises(ValueError):
         validate_cli_metadata(raw, fixup=False, explicit_doc_type=True)
 
@@ -46,7 +49,6 @@ def test_validate_cli_metadata_bad_doc_type_behavior():
     )
     assert isinstance(cleaned["doc_type"], str)
     assert cleaned["doc_type"] != "pptzzz"  # must not keep the invalid value
-
 
 
 def test_validation_runs_on_pydantic_v2_without_deprecation_shims():

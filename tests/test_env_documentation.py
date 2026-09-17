@@ -57,8 +57,19 @@ def test_the_docs_do_not_describe_variables_nothing_reads():
     assert not stale, f"documented but read by nothing: {sorted(stale)}"
 
 
-@pytest.mark.parametrize("name", sorted({"DEDUP_CHUNKS", "NEIGHBOR_RADIUS", "DOC_DIVERSITY_CAP",
-                                         "INGEST_THREADS", "ROUTE_MAX_TOKENS", "LLAMA_GPU_LAYERS"}))
+@pytest.mark.parametrize(
+    "name",
+    sorted(
+        {
+            "DEDUP_CHUNKS",
+            "NEIGHBOR_RADIUS",
+            "DOC_DIVERSITY_CAP",
+            "INGEST_THREADS",
+            "ROUTE_MAX_TOKENS",
+            "LLAMA_GPU_LAYERS",
+        }
+    ),
+)
 def test_previously_hidden_settings_appear_in_the_example_file(name):
     # These were readable only by grepping the source.
     assert name in EXAMPLE.read_text(encoding="utf-8")

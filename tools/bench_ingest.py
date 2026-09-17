@@ -32,7 +32,9 @@ def run(paths: List[str], repeat: int = 1, subject: str | None = None) -> None:
     # `subject` (when given) is normalized into doc_meta.subject; otherwise
     # the pipeline uses folder-name hint or auto-classification.
     meta: DocumentMetadata = normalize_cli_metadata(
-        language="auto", tags="bench", subject=subject,
+        language="auto",
+        tags="bench",
+        subject=subject,
     )
     t0 = time.perf_counter()
     up = 0
@@ -54,7 +56,7 @@ def main(argv=None) -> int:
         type=str,
         default=None,
         help="Force routing subject for these files: math|code|translation|default. "
-             "If omitted, uses folder-name hint or auto-classification.",
+        "If omitted, uses folder-name hint or auto-classification.",
     )
     args = ap.parse_args(argv)
 

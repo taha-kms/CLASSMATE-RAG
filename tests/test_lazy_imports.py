@@ -57,7 +57,9 @@ def test_importing_the_pipeline_does_not_load_the_heavy_stack(heavy):
     code = f"import rag.pipeline, sys; print({heavy!r} in sys.modules)"
     result = subprocess.run(
         [sys.executable, "-c", code],
-        capture_output=True, text=True, cwd=ROOT,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "False", f"importing rag.pipeline loaded {heavy}"

@@ -31,11 +31,11 @@ def bench(question: str, n: int, k: int, subject: str | None = None) -> None:
         )
         dt = time.perf_counter() - t0
         latencies.append(dt)
-        print(f"{i+1:>3}/{n}: {dt*1000:.1f} ms")
+        print(f"{i + 1:>3}/{n}: {dt * 1000:.1f} ms")
 
     mean = statistics.mean(latencies)
     p95 = statistics.quantiles(latencies, n=20)[18] if len(latencies) >= 20 else max(latencies)
-    print(f"\nMean: {mean*1000:.1f} ms   p95: {p95*1000:.1f} ms   (n={n})")
+    print(f"\nMean: {mean * 1000:.1f} ms   p95: {p95 * 1000:.1f} ms   (n={n})")
 
 
 def main(argv=None) -> int:
@@ -47,8 +47,7 @@ def main(argv=None) -> int:
         "--subject",
         type=str,
         default=None,
-        help="Force routing subject: math|code|translation|default. "
-             "Only used when ENABLE_ROUTING=true.",
+        help="Force routing subject: math|code|translation|default. Only used when ENABLE_ROUTING=true.",
     )
     args = ap.parse_args(argv)
 

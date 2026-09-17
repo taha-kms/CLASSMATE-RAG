@@ -28,13 +28,16 @@ from rag.retrieval import BM25Store, ChromaVectorStore
 # Internal helper functions
 # ------------------------------
 
+
 def _sha1_bytes(b: bytes) -> str:
     """Return SHA1 hash of raw bytes as hex string."""
     return hashlib.sha1(b).hexdigest()
 
+
 def _sha1_text(s: str) -> str:
     """Return SHA1 hash of a UTF-8 encoded string."""
     return _sha1_bytes((s or "").encode("utf-8", "ignore"))
+
 
 def _iter_bm25_catalog(path: Path | None = None) -> Iterator[Tuple[str, str, Dict[str, object]]]:
     """
@@ -60,6 +63,7 @@ def _iter_bm25_catalog(path: Path | None = None) -> Iterator[Tuple[str, str, Dic
             if cid and text:
                 yield cid, text, dict(meta)
 
+
 def _batched(items: List, n: int) -> Iterator[List]:
     """Split a list into batches of size n."""
     if n <= 0:
@@ -71,6 +75,7 @@ def _batched(items: List, n: int) -> Iterator[List]:
 # ------------------------------
 # Public API
 # ------------------------------
+
 
 def dump_index(
     out_path: str | Path,
@@ -111,7 +116,7 @@ def dump_index(
                     w.write(json.dumps(obj, ensure_ascii=False) + "\n")
                     total += 1
         else:
-            for (cid, text, meta) in entries:
+            for cid, text, meta in entries:
                 obj = {
                     "id": cid,
                     "text": text,

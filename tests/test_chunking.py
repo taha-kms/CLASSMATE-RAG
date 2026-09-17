@@ -1,4 +1,3 @@
-
 from rag.chunking.chunker import RagChunk, chunk_text, sentence_split
 
 
@@ -7,10 +6,8 @@ def test_sentence_split_basic_and_abbreviations():
     sents = sentence_split(txt)
 
     # Accept either join (abbrev-aware splitter) or separate tokens (current impl)
-    ok_first = (
-        "Dr. Smith went home." in sents or
-        ( "Dr." in sents and "Smith went home." in sents and
-          sents.index("Dr.") + 1 == sents.index("Smith went home.") )
+    ok_first = "Dr. Smith went home." in sents or (
+        "Dr." in sents and "Smith went home." in sents and sents.index("Dr.") + 1 == sents.index("Smith went home.")
     )
     assert ok_first, f"Unexpected split of first sentence: {sents}"
 
@@ -26,6 +23,7 @@ def test_sentence_split_whitespace_and_paragraphs():
     assert "Second line." in sents
     assert "New para starts here." in sents
     assert "Another." in sents
+
 
 def test_chunk_text_splits_and_overlaps():
     text = "One. Two. Three. Four. Five."

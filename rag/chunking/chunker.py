@@ -30,18 +30,28 @@ _SENT_BOUNDARY = re.compile(
 
 # Common abbreviations to avoid splitting incorrectly
 _ABBREV = {
-    "sig.", "sig.ra", "sig.na", "ing.", "dott.", "dr.", "prof.", "ecc.",
-    "etc.", "e.g.", "i.e.",
+    "sig.",
+    "sig.ra",
+    "sig.na",
+    "ing.",
+    "dott.",
+    "dr.",
+    "prof.",
+    "ecc.",
+    "etc.",
+    "e.g.",
+    "i.e.",
 }
 
 # Regex helpers for cleaning
 _WHITESPACE = re.compile(r"[ \t]+")
-_MULTI_NL = re.compile(r"\n{3,}")   # shrink 3+ newlines into 2
+_MULTI_NL = re.compile(r"\n{3,}")  # shrink 3+ newlines into 2
 
 
 @dataclass(frozen=True)
 class RagChunk:
     """Represents one chunk of text, with page number and chunk ID."""
+
     page: int
     chunk_id: int
     text: str
@@ -50,6 +60,7 @@ class RagChunk:
 # ------------------------------
 # Normalization and splitting
 # ------------------------------
+
 
 def _normalize_for_split(text: str) -> str:
     """Clean up whitespace and reduce multiple newlines before splitting."""
@@ -62,9 +73,11 @@ def _normalize_for_split(text: str) -> str:
     out = _MULTI_NL.sub("\n\n", out)
     return out.strip()
 
+
 def _split_paragraphs(text: str) -> List[str]:
     """Split text into paragraphs (separated by 2+ newlines)."""
     return [p for p in re.split(r"\n{2,}", text) if p.strip()]
+
 
 def _split_sentences_in_paragraph(par: str) -> List[str]:
     """
@@ -92,6 +105,7 @@ def _split_sentences_in_paragraph(par: str) -> List[str]:
     out = [s for s in out if s and not all(ch in ".!?,;:()[]{}\"'—–-" for ch in s)]
     return out
 
+
 def sentence_split(text: str) -> List[str]:
     """Split text into a clean list of sentences."""
     t = _normalize_for_split(text)
@@ -106,6 +120,7 @@ def sentence_split(text: str) -> List[str]:
 # ------------------------------
 # Chunking
 # ------------------------------
+
 
 def _pack_sentences(sents: Sequence[str], *, chunk_size: int) -> List[List[str]]:
     """
@@ -143,6 +158,7 @@ def _pack_sentences(sents: Sequence[str], *, chunk_size: int) -> List[List[str]]
     flush()
     return chunks
 
+
 def _compute_sentence_overlap(sent_block: List[str], target_overlap_chars: int) -> int:
     """
     Decide how many sentences from the previous chunk should overlap
@@ -158,6 +174,7 @@ def _compute_sentence_overlap(sent_block: List[str], target_overlap_chars: int) 
         if total >= target_overlap_chars:
             break
     return min(n, max(0, len(sent_block) - 1))
+
 
 def chunk_text(
     text: str,
@@ -194,6 +211,7 @@ def chunk_text(
             chunks.append(RagChunk(page=page, chunk_id=cid, text=txt))
             cid += 1
     return chunks
+
 
 def chunk_pages(
     pages: Iterable[Tuple[int, str]],

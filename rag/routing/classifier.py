@@ -36,6 +36,7 @@ def _l2_normalize(v: np.ndarray) -> np.ndarray:
 @dataclass
 class ClassificationResult:
     """Returned by classify_text(): a subject and the full score map."""
+
     subject: Route
     scores: Dict[Route, float]
     margin: float
@@ -87,10 +88,7 @@ class SubjectClassifier:
             return dict.fromkeys(ROUTES, 0.0)
         q = self.embedder.encode_queries([question])[0]
         q = _l2_normalize(q.astype("float32"))
-        return {
-            r: float(np.dot(q, self._prototype_map[r])) if r in self._prototype_map else 0.0
-            for r in ROUTES
-        }
+        return {r: float(np.dot(q, self._prototype_map[r])) if r in self._prototype_map else 0.0 for r in ROUTES}
 
     def score_passage(self, text: str) -> Dict[Route, float]:
         """Cosine similarity of a passage (document chunk) against each prototype."""
@@ -98,10 +96,7 @@ class SubjectClassifier:
             return dict.fromkeys(ROUTES, 0.0)
         p = self.embedder.encode_passages([text])[0]
         p = _l2_normalize(p.astype("float32"))
-        return {
-            r: float(np.dot(p, self._prototype_map[r])) if r in self._prototype_map else 0.0
-            for r in ROUTES
-        }
+        return {r: float(np.dot(p, self._prototype_map[r])) if r in self._prototype_map else 0.0 for r in ROUTES}
 
     def classify_text(
         self,

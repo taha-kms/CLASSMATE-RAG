@@ -14,8 +14,8 @@ from typing import Iterable, List, Set
 
 # --- Patterns for citation tokens and fixing spacing between them ---
 
-_CIT_RE = re.compile(r"\[(\d+)\]")               # matches [number]
-_ADJ_RE = re.compile(r"\]\s*(?:,?\s*)\[")        # matches "] [", "], [", "]   [", etc.
+_CIT_RE = re.compile(r"\[(\d+)\]")  # matches [number]
+_ADJ_RE = re.compile(r"\]\s*(?:,?\s*)\[")  # matches "] [", "], [", "]   [", etc.
 
 
 def cited_indices(text: str) -> List[int]:
@@ -47,14 +47,15 @@ def _remove_out_of_range(text: str, *, max_idx: int) -> str:
     """
     Drop any [n] where n < 1 or n > max_idx, then compact adjacent citations.
     """
+
     def _repl(m):
         n = int(m.group(1))
         if n < 1 or n > max_idx:
             return ""  # remove invalid reference
         return m.group(0)
 
-    cleaned = _CIT_RE.sub(_repl, text or "")      # remove invalid [n]
-    cleaned = _ADJ_RE.sub("][", cleaned)          # join adjacent citations
+    cleaned = _CIT_RE.sub(_repl, text or "")  # remove invalid [n]
+    cleaned = _ADJ_RE.sub("][", cleaned)  # join adjacent citations
     cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()  # normalize extra spaces
     return cleaned
 

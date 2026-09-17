@@ -49,6 +49,7 @@ except Exception:  # pragma: no cover
 # Type inference
 # -----------------------
 
+
 def infer_doc_type_from_path(path: str | Path) -> str:
     ext = Path(path).suffix.lower().lstrip(".")
     if ext in {"htm", "html"}:
@@ -73,6 +74,7 @@ def infer_doc_type_from_path(path: str | Path) -> str:
 # -----------------------
 # Primitive loaders
 # -----------------------
+
 
 def _load_txt(path: Path) -> List[Tuple[int, str]]:
     txt = path.read_text(encoding="utf-8", errors="ignore")
@@ -137,6 +139,7 @@ def _load_pptx(path: Path) -> List[Tuple[int, str]]:
 # -----------------------
 # Unified entrypoint
 # -----------------------
+
 
 def load_document_by_type(
     path: str | Path,

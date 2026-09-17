@@ -8,9 +8,7 @@ def _hit(doc, path):
 
 
 def test_blocks_are_numbered_from_one_and_carry_provenance():
-    text, prov = format_context_blocks(
-        [_hit("chain rule", "notes.md"), _hit("product rule", "slides.pdf")]
-    )
+    text, prov = format_context_blocks([_hit("chain rule", "notes.md"), _hit("product rule", "slides.pdf")])
     assert "[1] chain rule" in text
     assert "[2] product rule" in text
     assert prov == ["notes.md", "slides.pdf"]

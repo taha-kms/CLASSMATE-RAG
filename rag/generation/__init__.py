@@ -22,13 +22,16 @@ __all__ = [
 
 # Only the runner needs llama_cpp. prompting and post are pure Python, and
 # keeping them reachable without it is what lets them be tested.
-__getattr__, __dir__ = lazy_exports(__name__, {
-    "LlamaCppRunner": ".llama_cpp_runner",
-    "build_grounded_messages": ".prompting",
-    "build_general_messages": ".prompting",
-    "format_context_blocks": ".prompting",
-    "enforce_citations": ".post",
-})
+__getattr__, __dir__ = lazy_exports(
+    __name__,
+    {
+        "LlamaCppRunner": ".llama_cpp_runner",
+        "build_grounded_messages": ".prompting",
+        "build_general_messages": ".prompting",
+        "format_context_blocks": ".prompting",
+        "enforce_citations": ".post",
+    },
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from .llama_cpp_runner import LlamaCppRunner

@@ -61,15 +61,21 @@ class StickyModelLoader:
 
         target = get_model_spec(route, fallback_to_default=self.fallback_to_default)
 
-        if self._resident is not None and self._resident.spec.route == target.route \
-                and self._resident.spec.model_path == target.model_path:
+        if (
+            self._resident is not None
+            and self._resident.spec.route == target.route
+            and self._resident.spec.model_path == target.model_path
+        ):
             return self._resident.spec  # already loaded
 
         self._evict()
 
         log.info(
             "Loading route=%s model=%s n_ctx=%d gpu_layers=%d",
-            target.route, target.model_path, target.n_ctx, target.n_gpu_layers,
+            target.route,
+            target.model_path,
+            target.n_ctx,
+            target.n_gpu_layers,
         )
         llm = load_llama(
             target.model_path,
@@ -85,8 +91,7 @@ class StickyModelLoader:
         """Drop the resident model so the OS can reclaim its memory."""
         if self._resident is None:
             return
-        log.info("Evicting route=%s model=%s",
-                 self._resident.spec.route, self._resident.spec.model_path)
+        log.info("Evicting route=%s model=%s", self._resident.spec.route, self._resident.spec.model_path)
         try:
             # llama_cpp.Llama frees the underlying context on __del__.
             self._resident.llm = None  # type: ignore[assignment]

@@ -55,8 +55,13 @@ def test_generation_parameters_reach_the_model():
     llm.create_chat_completion.return_value = {"choices": [{"message": {"content": "ok"}}]}
 
     llama_backend.chat_completion(
-        llm, [{"role": "user", "content": "hi"}],
-        max_tokens=128, temperature=0.9, top_p=0.5, repeat_penalty=1.2, stop=["</s>"],
+        llm,
+        [{"role": "user", "content": "hi"}],
+        max_tokens=128,
+        temperature=0.9,
+        top_p=0.5,
+        repeat_penalty=1.2,
+        stop=["</s>"],
     )
 
     kwargs = llm.create_chat_completion.call_args.kwargs

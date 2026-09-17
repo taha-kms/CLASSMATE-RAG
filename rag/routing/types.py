@@ -42,7 +42,4 @@ class RouteDecision:
         """One-line summary for logs / debugging."""
         q = ",".join(f"{k}:{v:.2f}" for k, v in self.query_scores.items())
         m = ",".join(f"{k}:{v:.2f}" for k, v in self.meta_scores.items())
-        return (
-            f"route={self.route} reason={self.reason} "
-            f"margin={self.margin:.2f} Q={{{q}}} M={{{m}}}"
-        )
+        return f"route={self.route} reason={self.reason} margin={self.margin:.2f} Q={{{q}}} M={{{m}}}"

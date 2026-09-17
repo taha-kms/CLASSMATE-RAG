@@ -66,7 +66,11 @@ class HybridRouter:
         # 1) Query-confident path
         if top_q_route is not None and margin >= self.query_margin:
             chosen, reason = self._guard_translation(
-                top_q_route, question, q_scores, m_scores, margin,
+                top_q_route,
+                question,
+                q_scores,
+                m_scores,
+                margin,
             )
             return RouteDecision(
                 route=chosen,
@@ -80,7 +84,11 @@ class HybridRouter:
         top_m_route, top_m_frac = _top_fraction(m_scores)
         if top_m_route is not None and top_m_frac >= self.metadata_threshold:
             chosen, reason = self._guard_translation(
-                top_m_route, question, q_scores, m_scores, margin,
+                top_m_route,
+                question,
+                q_scores,
+                m_scores,
+                margin,
                 base_reason="metadata_override",
             )
             return RouteDecision(
@@ -131,6 +139,7 @@ class HybridRouter:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _meta_fractions(retrieved_metas: Sequence[Dict[str, object]]) -> Dict[Route, float]:
     """

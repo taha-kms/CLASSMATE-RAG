@@ -16,17 +16,20 @@ from typing import Iterable, List, Set, Tuple
 _WS = re.compile(r"\s+")
 _PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
 
+
 def _norm_tokens(s: str) -> list[str]:
     s = (s or "").lower()
     s = _PUNCT.sub(" ", s)
     s = _WS.sub(" ", s).strip()
     return s.split() if s else []
 
+
 def _shingles(tokens: Iterable[str], k: int = 5) -> Set[Tuple[str, ...]]:
     toks = list(tokens)
     if len(toks) < k:
         return {tuple(toks)} if toks else set()
     return {tuple(toks[i : i + k]) for i in range(0, len(toks) - k + 1)}
+
 
 def _jaccard(a: Set[Tuple[str, ...]], b: Set[Tuple[str, ...]]) -> float:
     if not a and not b:
@@ -36,6 +39,7 @@ def _jaccard(a: Set[Tuple[str, ...]], b: Set[Tuple[str, ...]]) -> float:
     inter = len(a & b)
     union = len(a | b)
     return inter / union if union else 0.0
+
 
 def dedup_block_indices(blocks: List[str], *, jaccard_threshold: float = 0.92) -> List[int]:
     """
