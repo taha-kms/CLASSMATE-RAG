@@ -15,7 +15,7 @@ into a string.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     from llama_cpp import Llama
@@ -58,13 +58,13 @@ def load_llama(
 
 def chat_completion(
     llm: Any,
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     *,
     max_tokens: int = 768,
     temperature: float = 0.2,
     top_p: float = 0.95,
     repeat_penalty: float = 1.0,
-    stop: Optional[List[str]] = None,
+    stop: list[str] | None = None,
 ) -> str:
     """Run an OpenAI-style chat completion and return the assistant text."""
     result = llm.create_chat_completion(

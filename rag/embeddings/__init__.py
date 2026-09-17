@@ -8,8 +8,8 @@ Provides:
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List
 
 import numpy as np
 
@@ -74,12 +74,12 @@ class E5MultilingualEmbedder:
     # ------------------------------
 
     @staticmethod
-    def _fmt_queries(queries: Iterable[str]) -> List[str]:
+    def _fmt_queries(queries: Iterable[str]) -> list[str]:
         """Add 'query:' prefix required by E5."""
         return [f"query: {q}" for q in queries]
 
     @staticmethod
-    def _fmt_passages(texts: Iterable[str]) -> List[str]:
+    def _fmt_passages(texts: Iterable[str]) -> list[str]:
         """Add 'passage:' prefix required by E5."""
         return [f"passage: {t}" for t in texts]
 

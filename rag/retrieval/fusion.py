@@ -4,8 +4,9 @@ Hybrid retrieval with Reciprocal Rank Fusion (RRF) + optional MMR diversificatio
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -18,9 +19,9 @@ from rag.retrieval.vector_chroma import ChromaVectorStore, build_where_filter
 def rrf_fuse(
     *,
     rank_lists: Sequence[Sequence[str]],
-    weights: Optional[Sequence[float]] = None,
+    weights: Sequence[float] | None = None,
     rrf_k: int = 60,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     if not rank_lists:
         return {}
     n = len(rank_lists)
@@ -28,7 +29,7 @@ def rrf_fuse(
         weights = [1.0] * n
     elif len(weights) != n:
         raise ValueError("weights length must match rank_lists length")
-    scores: Dict[str, float] = {}
+    scores: dict[str, float] = {}
     for li, ids in enumerate(rank_lists):
         w = float(weights[li])
         for rank_idx, _id in enumerate(ids):
@@ -37,13 +38,13 @@ def rrf_fuse(
     return scores
 
 
-def _mmr_order(q: np.ndarray, cands: np.ndarray, ids: List[str], k: int, lambd: float = 0.5) -> List[int]:
+def _mmr_order(q: np.ndarray, cands: np.ndarray, ids: list[str], k: int, lambd: float = 0.5) -> list[int]:
     if len(ids) == 0:
         return []
     q = q.reshape(1, -1).astype("float32")
     sims_q = (cands @ q.T).ravel()
     sims_cc = cands @ cands.T
-    selected: List[int] = []
+    selected: list[int] = []
     remaining = set(range(len(ids)))
     first = int(np.argmax(sims_q))
     selected.append(first)
@@ -66,7 +67,7 @@ def _mmr_order(q: np.ndarray, cands: np.ndarray, ids: List[str], k: int, lambd: 
 class HybridRetriever:
     vector_store: ChromaVectorStore
     bm25_store: BM25Store
-    embedder: "E5MultilingualEmbedder"
+    embedder: E5MultilingualEmbedder
 
     k_vector: int = 8
     k_bm25: int = 8
@@ -78,9 +79,7 @@ class HybridRetriever:
     mmr_lambda: float = 0.5
     mmr_max_pool: int = 24
 
-    def _vector_search(
-        self, *, query: str, where: Optional[Mapping[str, object]], k: int
-    ) -> List[Mapping[str, object]]:
+    def _vector_search(self, *, query: str, where: Mapping[str, object] | None, k: int) -> list[Mapping[str, object]]:
         q_vec = self.embedder.encode_queries([query])[0]
         pool_size = max(k, self.mmr_max_pool) if self.use_mmr else k
         res = self.vector_store.query(
@@ -104,7 +103,7 @@ class HybridRetriever:
         id_to_item = {r["id"]: r for r in res}
         return [id_to_item[ids[i]] for i in order if ids[i] in id_to_item]
 
-    def _bm25_search(self, *, query: str, where: Optional[Mapping[str, object]], k: int) -> List[Mapping[str, object]]:
+    def _bm25_search(self, *, query: str, where: Mapping[str, object] | None, k: int) -> list[Mapping[str, object]]:
         # BM25 expects simple metadata dict (not Chroma '$and' format)
         return self.bm25_store.search(query=query, where=where, top_k=k)
 
@@ -112,16 +111,16 @@ class HybridRetriever:
         self,
         *,
         question: str,
-        filters: Optional[Mapping[str, object]] = None,
+        filters: Mapping[str, object] | None = None,
         top_k: int = 8,
         hybrid: bool = True,
-    ) -> List[Dict[str, object]]:
+    ) -> list[dict[str, object]]:
         raw_filters = filters or {}
         chroma_where = build_where_filter(raw_filters) if raw_filters else None
         bm_where = raw_filters or None
 
-        vec_res: List[Mapping[str, object]] = []
-        bm25_res: List[Mapping[str, object]] = []
+        vec_res: list[Mapping[str, object]] = []
+        bm25_res: list[Mapping[str, object]] = []
 
         if hybrid:
             vec_res = self._vector_search(query=question, where=chroma_where, k=self.k_vector)
@@ -138,7 +137,7 @@ class HybridRetriever:
             rrf_k=self.rrf_k,
         )
 
-        by_id: Dict[str, Dict[str, object]] = {}
+        by_id: dict[str, dict[str, object]] = {}
         for r in vec_res:
             _id = r["id"]
             item = by_id.setdefault(

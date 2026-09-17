@@ -11,11 +11,9 @@ when no other route is confident.
 
 from __future__ import annotations
 
-from typing import Dict, List
-
 from .types import Route
 
-SUBJECT_PROTOTYPES: Dict[Route, List[str]] = {
+SUBJECT_PROTOTYPES: dict[Route, list[str]] = {
     "math": [
         "solve this equation step by step",
         "calculus derivative integral limit",

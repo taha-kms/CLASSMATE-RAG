@@ -6,14 +6,14 @@ by the hybrid router.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Literal, Tuple
+from typing import Literal
 
 # Canonical route names. The string values are stored in chunk metadata
 # under the `subject` key, so changing them is a breaking change for
 # previously-ingested data.
 Route = Literal["math", "code", "translation", "default"]
 
-ROUTES: Tuple[Route, ...] = ("math", "code", "translation", "default")
+ROUTES: tuple[Route, ...] = ("math", "code", "translation", "default")
 DEFAULT_ROUTE: Route = "default"
 
 
@@ -34,8 +34,8 @@ class RouteDecision:
 
     route: Route
     reason: str
-    query_scores: Dict[Route, float] = field(default_factory=dict)
-    meta_scores: Dict[Route, float] = field(default_factory=dict)
+    query_scores: dict[Route, float] = field(default_factory=dict)
+    meta_scores: dict[Route, float] = field(default_factory=dict)
     margin: float = 0.0
 
     def short_log(self) -> str:

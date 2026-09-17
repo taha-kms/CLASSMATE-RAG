@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from hashlib import blake2b
 from pathlib import Path
-from typing import Optional
 
 
 def stable_chunk_id(
@@ -19,8 +18,8 @@ def stable_chunk_id(
     source_path: str | Path,
     page: int,
     chunk_index: int,
-    course: Optional[str] = None,
-    unit: Optional[str] = None,
+    course: str | None = None,
+    unit: str | None = None,
     prefix: str = "cm_",
 ) -> str:
     sp = str(Path(source_path).resolve())

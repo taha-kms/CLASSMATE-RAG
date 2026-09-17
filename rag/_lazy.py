@@ -14,14 +14,14 @@ costs an import of llama_cpp to get there.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from importlib import import_module
-from typing import Callable, Dict, Tuple
 
 
 def lazy_exports(
     package: str,
-    exports: Dict[str, str],
-) -> Tuple[Callable[[str], object], Callable[[], list]]:
+    exports: dict[str, str],
+) -> tuple[Callable[[str], object], Callable[[], list]]:
     """
     Build the `__getattr__` and `__dir__` a lazy package needs.
 

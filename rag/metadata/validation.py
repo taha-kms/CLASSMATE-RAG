@@ -22,7 +22,7 @@ Notes
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -47,14 +47,14 @@ def _slug_tag(t: str) -> str:
     return s
 
 
-def _clean_str(v: Optional[str]) -> Optional[str]:
+def _clean_str(v: str | None) -> str | None:
     if v is None:
         return None
     v2 = str(v).strip()
     return v2 or None
 
 
-def _norm_lang(v: Optional[str]) -> Optional[str]:
+def _norm_lang(v: str | None) -> str | None:
     if v is None:
         return None
     v = v.strip().lower()
@@ -67,7 +67,7 @@ def _norm_lang(v: Optional[str]) -> Optional[str]:
     return None  # unknown -> handled by validators
 
 
-def _norm_doc_type(v: Optional[str]) -> Optional[str]:
+def _norm_doc_type(v: str | None) -> str | None:
     if v is None:
         return None
     v = v.strip().lower()
@@ -86,13 +86,13 @@ def _norm_doc_type(v: Optional[str]) -> Optional[str]:
 
 
 class _MetaInput(BaseModel):
-    course: Optional[str] = None
-    unit: Optional[str] = None
-    language: Optional[str] = None
-    doc_type: Optional[str] = None
-    author: Optional[str] = None
-    semester: Optional[str] = None
-    tags: Optional[List[str]] = None  # already split; CLI may pass comma string -> we’ll split earlier
+    course: str | None = None
+    unit: str | None = None
+    language: str | None = None
+    doc_type: str | None = None
+    author: str | None = None
+    semester: str | None = None
+    tags: list[str] | None = None  # already split; CLI may pass comma string -> we’ll split earlier
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -147,12 +147,12 @@ class _MetaInput(BaseModel):
 
 
 def validate_cli_metadata(
-    raw: Dict[str, Any],
+    raw: dict[str, Any],
     *,
     fixup: bool = False,
-    inferred_doc_type: Optional[str] = None,
+    inferred_doc_type: str | None = None,
     explicit_doc_type: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Validate and normalize a metadata dict.
 
@@ -217,7 +217,7 @@ def validate_cli_metadata(
     # tag normalization
     tags = data.get("tags")
     if tags:
-        out: List[str] = []
+        out: list[str] = []
         for t in tags:
             if fixup:
                 s = _slug_tag(t)

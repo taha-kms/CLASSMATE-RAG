@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
 
 from rag.config import Config, load_config
 
@@ -32,7 +31,7 @@ class ModelSpec:
     verbose: bool = False
 
 
-def route_model_paths(cfg: Optional[Config] = None) -> Dict[Route, Path]:
+def route_model_paths(cfg: Config | None = None) -> dict[Route, Path]:
     """Return the configured GGUF path for each route."""
     cfg = cfg or load_config()
     return {
@@ -46,7 +45,7 @@ def route_model_paths(cfg: Optional[Config] = None) -> Dict[Route, Path]:
 def get_model_spec(
     route: Route,
     *,
-    cfg: Optional[Config] = None,
+    cfg: Config | None = None,
     fallback_to_default: bool = True,
 ) -> ModelSpec:
     """

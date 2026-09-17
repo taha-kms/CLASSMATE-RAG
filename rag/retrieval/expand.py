@@ -14,9 +14,9 @@ Inputs/Outputs use the common retrieval dict shape:
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
 
 from rag.config import load_config
 from rag.utils import stable_chunk_id
@@ -29,18 +29,18 @@ class Retrieved:
     id: str
     document: str
     score: float
-    metadata: Dict[str, object]
+    metadata: dict[str, object]
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> dict[str, object]:
         return {"id": self.id, "document": self.document, "score": self.score, "metadata": self.metadata}
 
 
-def _load_bm25_catalog() -> Dict[str, Tuple[str, Dict[str, object]]]:
+def _load_bm25_catalog() -> dict[str, tuple[str, dict[str, object]]]:
     """
     Returns a dict: id -> (text, metadata)
     If the catalog file is missing, returns an empty dict.
     """
-    out: Dict[str, Tuple[str, Dict[str, object]]] = {}
+    out: dict[str, tuple[str, dict[str, object]]] = {}
     if not _BM25_JSONL.exists():
         return out
     with _BM25_JSONL.open("r", encoding="utf-8", errors="ignore") as f:
@@ -61,7 +61,7 @@ def _load_bm25_catalog() -> Dict[str, Tuple[str, Dict[str, object]]]:
     return out
 
 
-def _neighbor_ids(meta: Dict[str, object], *, radius: int) -> List[str]:
+def _neighbor_ids(meta: dict[str, object], *, radius: int) -> list[str]:
     """
     Build neighbor IDs for the same source file using stable_chunk_id.
     Requires: source_path, page, chunk_id (current), optionally course/unit to match hashing.
@@ -80,7 +80,7 @@ def _neighbor_ids(meta: Dict[str, object], *, radius: int) -> List[str]:
     course = meta.get("course") or None
     unit = meta.get("unit") or None
 
-    nids: List[str] = []
+    nids: list[str] = []
     for d in range(-radius, radius + 1):
         if d == 0:
             continue
@@ -97,12 +97,12 @@ def _neighbor_ids(meta: Dict[str, object], *, radius: int) -> List[str]:
 
 
 def expand_with_neighbors(
-    results: Sequence[Dict[str, object]],
+    results: Sequence[dict[str, object]],
     *,
     radius: int = 1,
-    max_per_doc: Optional[int] = None,
+    max_per_doc: int | None = None,
     neighbor_penalty: float = 0.001,
-) -> List[Dict[str, object]]:
+) -> list[dict[str, object]]:
     """
     Expand 'results' with neighbor chunks (same file, c±radius), then enforce per-document cap.
     - Neighbor entries inherit metadata from the catalog.
@@ -111,7 +111,7 @@ def expand_with_neighbors(
     """
     catalog = _load_bm25_catalog()
     seen_ids = set()
-    expanded: List[Retrieved] = []
+    expanded: list[Retrieved] = []
 
     # Seed: copy originals first
     for r in results:
@@ -141,8 +141,8 @@ def expand_with_neighbors(
 
     # Enforce per-document cap (diversity)
     if max_per_doc and max_per_doc > 0:
-        counts: Dict[str, int] = {}
-        kept: List[Retrieved] = []
+        counts: dict[str, int] = {}
+        kept: list[Retrieved] = []
         for it in expanded:
             sp = str(it.metadata.get("source_path") or "")
             cnt = counts.get(sp, 0)

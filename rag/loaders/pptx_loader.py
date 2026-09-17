@@ -13,7 +13,6 @@ Notes:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Tuple
 
 from pptx import Presentation
 
@@ -61,7 +60,7 @@ def _notes_text(slide) -> str:
 
 
 def _collect_slide_text(slide) -> str:
-    blocks: List[str] = []
+    blocks: list[str] = []
 
     # Title placeholder if available
     try:
@@ -86,7 +85,7 @@ def _collect_slide_text(slide) -> str:
         blocks.append(nt)
 
     # Deduplicate consecutive identical blocks and join
-    cleaned: List[str] = []
+    cleaned: list[str] = []
     last = None
     for b in blocks:
         if b and b != last:
@@ -95,7 +94,7 @@ def _collect_slide_text(slide) -> str:
     return "\n\n".join(cleaned)
 
 
-def load_pptx_slides(path: str | Path) -> List[Tuple[int, str]]:
+def load_pptx_slides(path: str | Path) -> list[tuple[int, str]]:
     """
     Read a .pptx file and return a list of (page_index, text) tuples.
     page_index is 1-based to match human-friendly slide numbering.
@@ -110,7 +109,7 @@ def load_pptx_slides(path: str | Path) -> List[Tuple[int, str]]:
         raise ValueError(f"Expected an existing .pptx file, got: {path}")
 
     pres = Presentation(str(p))
-    out: List[Tuple[int, str]] = []
+    out: list[tuple[int, str]] = []
 
     for i, slide in enumerate(pres.slides, start=1):
         txt = _collect_slide_text(slide).strip()

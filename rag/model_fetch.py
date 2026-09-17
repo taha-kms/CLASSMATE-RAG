@@ -17,7 +17,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -25,7 +24,7 @@ from dotenv import load_dotenv
 # importing this module does not require it.
 
 
-def _read_env(var: str, default: Optional[str] = None) -> Optional[str]:
+def _read_env(var: str, default: str | None = None) -> str | None:
     v = os.getenv(var)
     if v is None or v == "":
         return default

@@ -16,9 +16,9 @@ All operations are safe to repeat (idempotent).
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from rag.config import load_config
 from rag.metadata import DocumentMetadata
@@ -47,7 +47,7 @@ class CatalogEntry:
 
     id: str
     text: str
-    metadata: Dict[str, object]
+    metadata: dict[str, object]
 
 
 # ------------------------------
@@ -55,9 +55,9 @@ class CatalogEntry:
 # ------------------------------
 
 
-def _read_bm25_catalog() -> List[CatalogEntry]:
+def _read_bm25_catalog() -> list[CatalogEntry]:
     """Read BM25 catalog JSONL and return a list of entries."""
-    out: List[CatalogEntry] = []
+    out: list[CatalogEntry] = []
     if not _BM25_JSONL.exists():
         return out
     with _BM25_JSONL.open("r", encoding="utf-8", errors="ignore") as f:
@@ -86,7 +86,7 @@ def _matches_simple(meta: Mapping[str, object], where: Mapping[str, object]) -> 
             continue
         if k == "tags":
             # Tags can be string or list; check tag_* flags in metadata
-            tags: List[str] = []
+            tags: list[str] = []
             if isinstance(v, (list, tuple)):
                 tags = [str(x).strip().lower() for x in v if str(x).strip()]
             else:
@@ -100,9 +100,9 @@ def _matches_simple(meta: Mapping[str, object], where: Mapping[str, object]) -> 
     return True
 
 
-def _collect_source_paths(entries: Sequence[CatalogEntry]) -> List[str]:
+def _collect_source_paths(entries: Sequence[CatalogEntry]) -> list[str]:
     """Return unique source_path values from catalog entries."""
-    paths: List[str] = []
+    paths: list[str] = []
     seen: set[str] = set()
     for e in entries:
         sp = str(e.metadata.get("source_path") or "").strip()
@@ -112,9 +112,9 @@ def _collect_source_paths(entries: Sequence[CatalogEntry]) -> List[str]:
     return paths
 
 
-def _group_by_source(entries: Sequence[CatalogEntry]) -> Dict[str, List[CatalogEntry]]:
+def _group_by_source(entries: Sequence[CatalogEntry]) -> dict[str, list[CatalogEntry]]:
     """Group entries by their source_path."""
-    by: Dict[str, List[CatalogEntry]] = {}
+    by: dict[str, list[CatalogEntry]] = {}
     for e in entries:
         sp = str(e.metadata.get("source_path") or "")
         by.setdefault(sp, []).append(e)
@@ -128,10 +128,10 @@ def _group_by_source(entries: Sequence[CatalogEntry]) -> Dict[str, List[CatalogE
 
 def list_entries(
     *,
-    where: Optional[Mapping[str, object]] = None,
-    limit: Optional[int] = None,
+    where: Mapping[str, object] | None = None,
+    limit: int | None = None,
     offset: int = 0,
-) -> List[CatalogEntry]:
+) -> list[CatalogEntry]:
     """List catalog entries filtered by metadata, with optional paging."""
     cat = _read_bm25_catalog()
     filt = [e for e in cat if _matches_simple(e.metadata, where or {})]
@@ -142,14 +142,14 @@ def list_entries(
     return filt[offset : offset + limit]
 
 
-def show_entries_by_id(ids: Iterable[str]) -> List[CatalogEntry]:
+def show_entries_by_id(ids: Iterable[str]) -> list[CatalogEntry]:
     """Return catalog entries matching the given IDs (preserve order)."""
     want = [str(x) for x in ids]
     if not want:
         return []
     cat = _read_bm25_catalog()
     index = {e.id: e for e in cat}
-    out: List[CatalogEntry] = []
+    out: list[CatalogEntry] = []
     for i in want:
         e = index.get(i)
         if e:
@@ -159,10 +159,10 @@ def show_entries_by_id(ids: Iterable[str]) -> List[CatalogEntry]:
 
 def resolve_ids(
     *,
-    ids: Optional[Iterable[str]] = None,
-    where: Optional[Mapping[str, object]] = None,
-    path: Optional[str] = None,
-) -> List[str]:
+    ids: Iterable[str] | None = None,
+    where: Mapping[str, object] | None = None,
+    path: str | None = None,
+) -> list[str]:
     """
     Get chunk IDs from ids, path, or filter.
     - If ids provided → use directly (if they exist).
@@ -181,7 +181,7 @@ def resolve_ids(
     return [e.id for e in cat if _matches_simple(e.metadata, where or {})]
 
 
-def delete_by_ids(ids: Sequence[str]) -> Tuple[int, int]:
+def delete_by_ids(ids: Sequence[str]) -> tuple[int, int]:
     """
     Delete given chunk IDs from both vector and BM25 stores.
     Returns (num_deleted_from_vector, num_deleted_from_bm25).
@@ -204,7 +204,7 @@ def delete_by_ids(ids: Sequence[str]) -> Tuple[int, int]:
     return (n_vec, n_bm25)
 
 
-def reingest_paths(paths: Sequence[str]) -> List[Dict[str, object]]:
+def reingest_paths(paths: Sequence[str]) -> list[dict[str, object]]:
     """
     Reingest files by their paths.
     Metadata is inferred from existing catalog entries:
@@ -220,7 +220,7 @@ def reingest_paths(paths: Sequence[str]) -> List[Dict[str, object]]:
     cat = _read_bm25_catalog()
     by_path = _group_by_source(cat)
 
-    results: List[Dict[str, object]] = []
+    results: list[dict[str, object]] = []
     for raw in paths:
         p = Path(raw).expanduser().resolve()
         key = str(p)
@@ -267,7 +267,7 @@ def reingest_paths(paths: Sequence[str]) -> List[Dict[str, object]]:
     return results
 
 
-def list_source_paths(*, where: Optional[Mapping[str, object]] = None) -> List[str]:
+def list_source_paths(*, where: Mapping[str, object] | None = None) -> list[str]:
     """Return all unique source_path values matching a filter."""
     entries = list_entries(where=where)
     return _collect_source_paths(entries)

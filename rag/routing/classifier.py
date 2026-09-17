@@ -17,8 +17,8 @@ Implementation notes:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 
@@ -38,7 +38,7 @@ class ClassificationResult:
     """Returned by classify_text(): a subject and the full score map."""
 
     subject: Route
-    scores: Dict[Route, float]
+    scores: dict[Route, float]
     margin: float
 
 
@@ -52,18 +52,18 @@ class SubjectClassifier:
 
     def __init__(
         self,
-        embedder: Optional[E5MultilingualEmbedder] = None,
-        prototypes: Optional[Dict[Route, List[str]]] = None,
+        embedder: E5MultilingualEmbedder | None = None,
+        prototypes: dict[Route, list[str]] | None = None,
     ) -> None:
         self.embedder = embedder or E5MultilingualEmbedder()
-        self._prototype_map: Dict[Route, np.ndarray] = {}
+        self._prototype_map: dict[Route, np.ndarray] = {}
         self._build_prototypes(prototypes or SUBJECT_PROTOTYPES)
 
     # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
 
-    def _build_prototypes(self, proto: Dict[Route, List[str]]) -> None:
+    def _build_prototypes(self, proto: dict[Route, list[str]]) -> None:
         """Embed each route's seed phrases and store the L2-normalized mean."""
         for route in ROUTES:
             seeds = proto.get(route, [])
@@ -79,7 +79,7 @@ class SubjectClassifier:
     # Public scoring API
     # ------------------------------------------------------------------
 
-    def score_query(self, question: str) -> Dict[Route, float]:
+    def score_query(self, question: str) -> dict[Route, float]:
         """
         Cosine similarity of the question against each prototype.
         Routes without a prototype (e.g. "default") get score 0.0.
@@ -90,7 +90,7 @@ class SubjectClassifier:
         q = _l2_normalize(q.astype("float32"))
         return {r: float(np.dot(q, self._prototype_map[r])) if r in self._prototype_map else 0.0 for r in ROUTES}
 
-    def score_passage(self, text: str) -> Dict[Route, float]:
+    def score_passage(self, text: str) -> dict[Route, float]:
         """Cosine similarity of a passage (document chunk) against each prototype."""
         if not text or not text.strip():
             return dict.fromkeys(ROUTES, 0.0)
@@ -126,7 +126,7 @@ class SubjectClassifier:
         Pool-classify a document by averaging passage scores across a sample
         of its chunks. Cheaper and more stable than classifying every chunk.
         """
-        texts: List[str] = [t for t in chunk_texts if t and t.strip()]
+        texts: list[str] = [t for t in chunk_texts if t and t.strip()]
         if not texts:
             return ClassificationResult(
                 subject=DEFAULT_ROUTE,
@@ -140,7 +140,7 @@ class SubjectClassifier:
         else:
             sampled = texts
 
-        agg: Dict[Route, float] = dict.fromkeys(ROUTES, 0.0)
+        agg: dict[Route, float] = dict.fromkeys(ROUTES, 0.0)
         for t in sampled:
             for r, s in self.score_passage(t).items():
                 agg[r] += s
@@ -152,7 +152,7 @@ class SubjectClassifier:
         return ClassificationResult(subject=top_route, scores=scores, margin=margin)
 
 
-def _top_with_margin(scores: Dict[Route, float]) -> Tuple[Optional[Route], float, float]:
+def _top_with_margin(scores: dict[Route, float]) -> tuple[Route | None, float, float]:
     """
     Return (top_route, top_score, margin = top1 - top2). Routes with a
     score of 0.0 (no prototype) are excluded from the top-N selection,

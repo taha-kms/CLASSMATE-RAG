@@ -20,8 +20,8 @@ A forced subject (e.g. set explicitly by the user) short-circuits to "forced".
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Dict, Optional, Sequence
 
 from .classifier import SubjectClassifier
 from .prototypes import TRANSLATION_INTENT_KEYWORDS
@@ -43,9 +43,9 @@ class HybridRouter:
     def decide(
         self,
         question: str,
-        retrieved_metas: Sequence[Dict[str, object]] | None = None,
+        retrieved_metas: Sequence[dict[str, object]] | None = None,
         *,
-        forced_subject: Optional[Route] = None,
+        forced_subject: Route | None = None,
     ) -> RouteDecision:
         # Hard override: user (or upstream config) named the route.
         if forced_subject in ROUTES:
@@ -116,8 +116,8 @@ class HybridRouter:
         self,
         proposed: Route,
         question: str,
-        q_scores: Dict[Route, float],
-        m_scores: Dict[Route, float],
+        q_scores: dict[Route, float],
+        m_scores: dict[Route, float],
         margin: float,
         *,
         base_reason: str = "query_confident",
@@ -141,12 +141,12 @@ class HybridRouter:
 # ---------------------------------------------------------------------------
 
 
-def _meta_fractions(retrieved_metas: Sequence[Dict[str, object]]) -> Dict[Route, float]:
+def _meta_fractions(retrieved_metas: Sequence[dict[str, object]]) -> dict[Route, float]:
     """
     Count the `subject` tag across retrieved chunks and return per-route
     fractions. Chunks without a tag don't contribute.
     """
-    counts: Dict[Route, int] = dict.fromkeys(ROUTES, 0)
+    counts: dict[Route, int] = dict.fromkeys(ROUTES, 0)
     tagged = 0
     for meta in retrieved_metas:
         if not isinstance(meta, dict):
@@ -160,7 +160,7 @@ def _meta_fractions(retrieved_metas: Sequence[Dict[str, object]]) -> Dict[Route,
     return {r: counts[r] / tagged for r in ROUTES}
 
 
-def _top_two(scores: Dict[Route, float]) -> tuple[Optional[Route], float, float]:
+def _top_two(scores: dict[Route, float]) -> tuple[Route | None, float, float]:
     """Return (top_route, top_score, second_score). Excludes 0.0 scores."""
     cand = [(r, s) for r, s in scores.items() if s > 0.0]
     if not cand:
@@ -171,7 +171,7 @@ def _top_two(scores: Dict[Route, float]) -> tuple[Optional[Route], float, float]
     return top_r, top_s, second
 
 
-def _top_fraction(scores: Dict[Route, float]) -> tuple[Optional[Route], float]:
+def _top_fraction(scores: dict[Route, float]) -> tuple[Route | None, float]:
     cand = [(r, s) for r, s in scores.items() if s > 0.0]
     if not cand:
         return None, 0.0

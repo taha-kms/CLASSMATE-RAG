@@ -19,7 +19,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -52,7 +51,7 @@ def resolve_data_path(value: str | Path) -> Path:
     return (_project_root() / p).resolve()
 
 
-def _getenv_str(name: str, default: Optional[str] = None) -> Optional[str]:
+def _getenv_str(name: str, default: str | None = None) -> str | None:
     val = os.getenv(name)
     if val is None or val == "":
         return default
@@ -96,9 +95,9 @@ class Config:
     llm_model_path: Path = Path("./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf")
 
     # Optional auto-download parameters (used if model file missing)
-    hf_token: Optional[str] = None
-    llm_repo_id: Optional[str] = None
-    llm_filename: Optional[str] = None
+    hf_token: str | None = None
+    llm_repo_id: str | None = None
+    llm_filename: str | None = None
 
     # Chroma
     chroma_persist_directory: Path = Path("./indexes/chroma")
@@ -205,7 +204,7 @@ class Config:
 
 
 # Single, cached instance after first load
-__CONFIG_SINGLETON: Optional[Config] = None
+__CONFIG_SINGLETON: Config | None = None
 
 
 def load_config(reload: bool = False) -> Config:
@@ -289,7 +288,7 @@ def load_config(reload: bool = False) -> Config:
     return cfg
 
 
-def configure_logging(level: Optional[str] = None) -> None:
+def configure_logging(level: str | None = None) -> None:
     """
     Install a basic logging configuration from LOG_LEVEL.
 

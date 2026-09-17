@@ -16,7 +16,6 @@ from __future__ import annotations
 import gc
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 from rag.generation.llama_backend import chat_completion, load_llama, require_llama
 
@@ -45,7 +44,7 @@ class StickyModelLoader:
     """
 
     fallback_to_default: bool = True
-    _resident: Optional[_ResidentModel] = field(default=None, init=False, repr=False)
+    _resident: _ResidentModel | None = field(default=None, init=False, repr=False)
 
     # ------------------------------------------------------------------
     # Loading / swapping
@@ -111,12 +110,12 @@ class StickyModelLoader:
         self,
         *,
         route: Route,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         max_tokens: int = 512,
         temperature: float = 0.2,
         top_p: float = 0.95,
         repeat_penalty: float = 1.0,
-        stop: Optional[List[str]] = None,
+        stop: list[str] | None = None,
     ) -> str:
         """
         Run a chat completion on the route's model. Loads/swaps as needed.
@@ -141,9 +140,9 @@ class StickyModelLoader:
     # ------------------------------------------------------------------
 
     @property
-    def current_route(self) -> Optional[Route]:
+    def current_route(self) -> Route | None:
         return self._resident.spec.route if self._resident else None
 
     @property
-    def current_spec(self) -> Optional[ModelSpec]:
+    def current_spec(self) -> ModelSpec | None:
         return self._resident.spec if self._resident else None

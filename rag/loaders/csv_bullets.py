@@ -11,8 +11,8 @@ Returns: list[(page_number, text)]
 from __future__ import annotations
 
 import csv
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List, Tuple
 
 
 def _iter_rows(path: Path) -> Iterable[dict]:
@@ -38,9 +38,9 @@ def _row_to_bullet(row: dict) -> str:
     return "- " + "; ".join(parts) if parts else ""
 
 
-def load_csv_bullets(path: str | Path, *, rows_per_page: int = 80) -> List[Tuple[int, str]]:
+def load_csv_bullets(path: str | Path, *, rows_per_page: int = 80) -> list[tuple[int, str]]:
     p = Path(path).expanduser().resolve()
-    bullets: List[str] = []
+    bullets: list[str] = []
     for row in _iter_rows(p):
         b = _row_to_bullet(row)
         if b:
@@ -49,7 +49,7 @@ def load_csv_bullets(path: str | Path, *, rows_per_page: int = 80) -> List[Tuple
     if not bullets:
         return []
 
-    pages: List[Tuple[int, str]] = []
+    pages: list[tuple[int, str]] = []
     page = 1
     for i in range(0, len(bullets), rows_per_page):
         chunk = "\n".join(bullets[i : i + rows_per_page])

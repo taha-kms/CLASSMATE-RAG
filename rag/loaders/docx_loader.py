@@ -8,20 +8,19 @@ We return a single (1, text) tuple; chunking will split further down the pipelin
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Tuple
 
 from docx import Document
 
 from rag.utils.text import normalize_text
 
 
-def load_docx_blocks(path: str | Path) -> List[Tuple[int, str]]:
+def load_docx_blocks(path: str | Path) -> list[tuple[int, str]]:
     p = Path(path)
     if not p.exists() or p.suffix.lower() != ".docx":
         raise ValueError(f"Expected an existing .docx file, got: {path}")
 
     doc = Document(str(p))
-    parts: List[str] = []
+    parts: list[str] = []
     for para in doc.paragraphs:
         t = (para.text or "").strip()
         if t:

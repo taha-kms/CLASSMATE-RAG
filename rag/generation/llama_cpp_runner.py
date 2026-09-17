@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
 from rag.config import load_config
 from rag.generation.llama_backend import chat_completion, load_llama, require_llama
@@ -27,9 +26,9 @@ class LlamaCppRunner:
     def __init__(
         self,
         *,
-        model_path: Optional[Union[str, Path]] = None,
+        model_path: str | Path | None = None,
         n_ctx: int = 4096,
-        n_gpu_layers: Optional[int] = None,
+        n_gpu_layers: int | None = None,
         seed: int = 42,
         verbose: bool = False,
     ) -> None:
@@ -58,13 +57,13 @@ class LlamaCppRunner:
 
     def chat(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         *,
         max_tokens: int = 768,
         temperature: float = 0.2,
         top_p: float = 0.95,
         repeat_penalty: float = 1.0,
-        stop: Optional[List[str]] = None,
+        stop: list[str] | None = None,
     ) -> str:
         """Run an OpenAI-style chat completion and return the assistant text."""
         return chat_completion(
@@ -85,7 +84,7 @@ class LlamaCppRunner:
         temperature: float = 0.7,
         top_p: float = 0.95,
         top_k: int = 40,
-        stop: Optional[List[str]] = None,
+        stop: list[str] | None = None,
     ) -> str:
         """Single-string completion (kept for backward compatibility)."""
         res = self.model(

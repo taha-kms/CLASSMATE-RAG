@@ -9,7 +9,6 @@ PDF loader.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Tuple
 
 from pypdf import PdfReader
 
@@ -40,13 +39,13 @@ def _ocr_page_images_to_text(pdf_path: Path, page_index_zero: int, ocr_lang: str
         return ""
 
 
-def load_pdf_pages(path: str | Path, enable_ocr: bool = False, ocr_lang: str = "eng+ita") -> List[Tuple[int, str]]:
+def load_pdf_pages(path: str | Path, enable_ocr: bool = False, ocr_lang: str = "eng+ita") -> list[tuple[int, str]]:
     p = Path(path)
     if not p.exists() or p.suffix.lower() != ".pdf":
         raise ValueError(f"Expected an existing .pdf file, got: {path}")
 
     reader = PdfReader(str(p))
-    out: List[Tuple[int, str]] = []
+    out: list[tuple[int, str]] = []
 
     for i, page in enumerate(reader.pages):
         try:
