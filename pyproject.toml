@@ -31,6 +31,10 @@ include = ["cli*", "rag*"]
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
 optional-dependencies.dev = { file = ["requirements-test.txt"] }
+# Hosted provider SDKs, each optional. Declared from files rather than
+# inline because `dynamic` and a static [project.optional-dependencies]
+# cannot coexist: setuptools refuses the build outright.
+optional-dependencies.anthropic = { file = ["requirements-anthropic.txt"] }
 
 [tool.ruff]
 line-length = 120

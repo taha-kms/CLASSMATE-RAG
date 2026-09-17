@@ -188,6 +188,13 @@ def get_backend(name: str | None = None) -> ChatBackend:
     into a provider.
     """
     name = (name or load_config().llm_provider or "llama_cpp").strip().lower()
+
+    # Providers register on import. Done here rather than at module scope so
+    # importing this module never pulls in a provider SDK.
+    if name not in _BACKENDS:
+        from rag.generation.providers import register_all
+
+        register_all()
     factory = _BACKENDS.get(name)
     if factory is None:
         raise ValueError(f"Unknown LLM_PROVIDER '{name}'. Available: {', '.join(available_backends())}.")
