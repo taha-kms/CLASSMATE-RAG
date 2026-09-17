@@ -26,6 +26,15 @@ cp .env.example .env
 | `LLAMA_GPU_LAYERS` | Layers to offload to the GPU on the non-routed path. `0` is CPU only | `0` |
 | `HF_TOKEN` | Token for private or gated repos. `HUGGINGFACE_HUB_TOKEN` and `CLASSMATE_RAG_HF_TOKEN` are accepted too | unset |
 
+#### Local vs. Hosted Backends and Data Privacy
+
+`LLM_BACKEND` defaults to `llama_cpp`. This local-first default ensures that your documents and queries never leave your machine: ingestion, vector generation, and answer synthesis happen on local hardware.
+
+When opting into a hosted LLM provider (such as Anthropic, OpenAI, or Google):
+* **What leaves the machine:** Only the specific query and the retrieved context passages/chunks required to answer the question are transmitted over the wire. The broader document index and unretrieved course materials **never** leave your machine.
+* **Cost implications:** Hosted APIs charge per token. Retrieved context chunks make up the largest proportion of prompt tokens, making long retrieved contexts the primary driver of query cost.
+* **Privacy by default:** `llama_cpp` is kept as the default so that the privacy-preserving path requires no conscious configuration or trade-offs.
+
 ### Storage
 
 Relative paths resolve against the project root, not your working directory,

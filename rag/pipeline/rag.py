@@ -107,6 +107,8 @@ class AskResult:
     # Populated when routing is enabled; None on the legacy single-model path.
     route: Optional[str] = None
     route_reason: Optional[str] = None
+    # Backend that answered the query (e.g. llama_cpp)
+    backend: str = "llama_cpp"
 
 
 _UNGROUNDED_NOTICE = {
@@ -728,6 +730,7 @@ def ask_question(
             hybrid=bool(hybrid),
             route=decision.route,
             route_reason=decision.reason,
+            backend=cfg.llm_backend,
         )
 
     # ---- Legacy single-model path (routing disabled) ---------------------
@@ -785,4 +788,5 @@ def ask_question(
         retrieved=results,
         filters_applied=where,
         hybrid=bool(hybrid),
+        backend=cfg.llm_backend,
     )
