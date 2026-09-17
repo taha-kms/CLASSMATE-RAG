@@ -17,9 +17,16 @@ from __future__ import annotations
 
 import gc
 import logging
+import threading
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
-from rag.generation.llama_backend import chat_completion, load_llama, require_llama
+from rag.generation.llama_backend import (
+    chat_completion,
+    chat_completion_stream,
+    load_llama,
+    require_llama,
+)
 
 from .registry import ModelSpec, get_model_spec
 from .types import Route
@@ -33,6 +40,25 @@ class _ResidentModel:
 
     spec: ModelSpec
     llm: object  # llama_cpp.Llama, kept as object to avoid a hard import dep
+
+
+#: Serialises everything that touches the resident model.
+#
+# The loader frees the current llama_cpp.Llama before loading the next one,
+# so two concurrent callers can have one thread reading a context another
+# has just released. That is a segfault rather than an exception, and no
+# amount of retrying recovers from it.
+#
+# A plain Lock, not an RLock: the entry points (chat, chat_stream) each take
+# it exactly once, and ensure_loaded deliberately does not take it so it can
+# be called from inside. Keep it that way, or this deadlocks.
+_GENERATION_LOCK = threading.Lock()
+
+
+def generation_lock() -> threading.Lock:
+    """The lock guarding the resident model. Exposed so a caller can hold it
+    across a whole streamed response, and so tests can observe it."""
+    return _GENERATION_LOCK
 
 
 @dataclass
@@ -123,19 +149,69 @@ class StickyModelLoader:
         Run a chat completion on the route's model. Loads/swaps as needed.
         Returns the assistant message text (stripped).
         """
-        spec = self.ensure_loaded(route)
-        if self._resident is None or self._resident.llm is None:
-            raise RuntimeError(f"Model for route '{spec.route}' failed to load.")
+        with _GENERATION_LOCK:
+            spec = self.ensure_loaded(route)
+            if self._resident is None or self._resident.llm is None:
+                raise RuntimeError(f"Model for route '{spec.route}' failed to load.")
 
-        return chat_completion(
-            self._resident.llm,
-            messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            repeat_penalty=repeat_penalty,
-            stop=stop,
-        )
+            return chat_completion(
+                self._resident.llm,
+                messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                repeat_penalty=repeat_penalty,
+                stop=stop,
+            )
+
+    def chat_stream(
+        self,
+        *,
+        route: Route,
+        messages: list[dict[str, str]],
+        max_tokens: int = 512,
+        temperature: float = 0.2,
+        top_p: float = 0.95,
+        repeat_penalty: float = 1.0,
+        stop: list[str] | None = None,
+    ) -> Iterator[str]:
+        """
+        Stream a completion on the route's model, loading or swapping first.
+
+        The lock is taken before the generator is returned rather than inside
+        it. A generator body does not run until the first next(), so taking
+        it inside would let two callers both hold un-started generators and
+        then race to swap the resident model.
+
+        It is released when the generator is exhausted or closed. Abandoning
+        one without closing it holds the lock until it is collected, which is
+        why the release sits in a finally.
+        """
+        _GENERATION_LOCK.acquire()
+        try:
+            spec = self.ensure_loaded(route)
+            if self._resident is None or self._resident.llm is None:
+                raise RuntimeError(f"Model for route '{spec.route}' failed to load.")
+            llm = self._resident.llm
+        except BaseException:
+            _GENERATION_LOCK.release()
+            raise
+
+        def _stream() -> Iterator[str]:
+            try:
+                yield from chat_completion_stream(
+                    llm,
+                    messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    repeat_penalty=repeat_penalty,
+                    stop=stop,
+                )
+            finally:
+                _GENERATION_LOCK.release()
+
+        return _stream()
 
     # ------------------------------------------------------------------
     # Introspection

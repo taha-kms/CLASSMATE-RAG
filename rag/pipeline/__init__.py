@@ -38,6 +38,7 @@ from rag.admin import (
 
 from .rag import (
     ask_question,
+    ask_question_stream,
     ingest_file,
 )
 
@@ -45,6 +46,7 @@ from .rag import (
 __all__ = [
     "ingest_file",
     "ask_question",
+    "ask_question_stream",
     "retrieve_preview",
     "index_stats",
 ]

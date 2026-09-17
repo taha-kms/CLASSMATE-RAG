@@ -157,3 +157,40 @@ returned, but with no sources and a short notice:
 
 That case is common with small models, which often ignore the instruction
 to cite. Treat those answers as you would any ungrounded model output.
+
+## Watching the answer as it is written
+
+Generation on a laptop takes tens of seconds, and a command that prints
+nothing for that long is hard to tell apart from a hang.
+
+```bash
+rag ask "What is the chain rule?" --course Maths --stream
+```
+
+```
+[Searching your documents]
+[Loading the model]
+[Writing the answer]
+The product rule states that for a product of two differentiable...
+```
+
+Progress and the answer text go to stderr; stdout is still the same JSON,
+so piping keeps working:
+
+```bash
+rag ask "..." --course Maths --stream | jq .answer
+```
+
+The result is identical either way. `--stream` changes when you see it, not
+what you get.
+
+One thing to know: if the model answers that it does not know, the pipeline
+re-asks without your documents. What was already shown is withdrawn rather
+than added to, and you will see:
+
+```
+[no answer in your documents; answering without them]
+```
+
+The answer that follows is from the model's own knowledge, and the JSON
+will say `"grounded": false`.

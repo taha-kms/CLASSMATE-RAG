@@ -21,7 +21,7 @@ Design notes
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -52,6 +52,13 @@ from rag.utils.dedup import dedup_block_indices
 if TYPE_CHECKING:  # pragma: no cover - annotation only
     pass
 from rag.generation.post import cited_indices, enforce_citations
+from rag.generation.stream import (
+    FinalEvent,
+    ReplaceEvent,
+    StageEvent,
+    StreamEvent,
+    TokenEvent,
+)
 
 # Route names and decision types are pure Python. The classifier, the
 # sticky loader and the prompt table are imported where they are used, so
@@ -575,7 +582,38 @@ def ask_question(
     forced_subject: str | None = None,
 ) -> AskResult:
     """
-    Full RAG query path:
+    Answer a question, returning the finished result.
+
+    A thin drain over ask_question_stream(), so there is one implementation
+    rather than two that drift. Callers wanting progress should use the
+    streaming form directly.
+    """
+    events = ask_question_stream(
+        question=question,
+        filters=filters,
+        top_k=top_k,
+        hybrid=hybrid,
+        forced_subject=forced_subject,
+    )
+    final: AskResult | None = None
+    for event in events:
+        if isinstance(event, FinalEvent):
+            final = event.result
+    if final is None:  # pragma: no cover - the stream always ends with one
+        raise RuntimeError("the answer stream ended without a result")
+    return final
+
+
+def ask_question_stream(
+    *,
+    question: str,
+    filters: DocumentMetadata,
+    top_k: int = 8,
+    hybrid: bool = True,
+    forced_subject: str | None = None,
+) -> Iterator[StreamEvent]:
+    """
+    Full RAG query path, reported as it happens:
       1) Build retriever (vector + BM25) with e5 embedder (cached).
       2) Retrieve with metadata filters; then expand neighbors + doc diversity.
       3) Choose answer language (forced by filters.language if en/it, otherwise config).
@@ -584,6 +622,8 @@ def ask_question(
       6) Optional: strict citations (enforce [n] usage and append sources list).
     """
     cfg = load_config()
+
+    yield StageEvent("retrieving")
 
     # Components
     vec_store = ChromaVectorStore.from_config()
@@ -641,6 +681,8 @@ def ask_question(
         if isinstance(candidate, str) and candidate in ROUTES:
             forced_route = candidate  # type: ignore[assignment]
 
+        yield StageEvent("routing")
+
         retrieved_metas = [r.get("metadata") or {} for r in results]
         decision: RouteDecision = _get_hybrid_router().decide(
             question,
@@ -660,13 +702,21 @@ def ask_question(
         ]
 
         loader = _get_model_loader()
-        answer = loader.chat(
+
+        yield StageEvent("loading_model")
+        yield StageEvent("generating")
+
+        pieces: list[str] = []
+        for piece in loader.chat_stream(
             route=decision.route,
             messages=messages,
             max_tokens=int(cfg.route_max_tokens),
             temperature=float(cfg.route_temperature),
             top_p=float(cfg.route_top_p),
-        ).strip()
+        ):
+            pieces.append(piece)
+            yield TokenEvent(piece)
+        answer = "".join(pieces).strip()
 
         # Fall back to a general (non-routed) answer if the model bailed out
         # with "I don't know". Use a context-free system prompt — the route
@@ -680,13 +730,21 @@ def ask_question(
                     "role": "system",
                     "content": "Sei un assistente generico. Rispondi alla domanda dell'utente.",
                 }
-            answer = loader.chat(
+            # The first answer was real output, not a partial one, so it is
+            # withdrawn rather than appended to.
+            yield ReplaceEvent("unknown_fallback")
+
+            pieces = []
+            for piece in loader.chat_stream(
                 route=decision.route,
                 messages=general_msgs,
                 max_tokens=int(cfg.route_max_tokens),
                 temperature=float(cfg.route_temperature),
                 top_p=float(cfg.route_top_p),
-            ).strip()
+            ):
+                pieces.append(piece)
+                yield TokenEvent(piece)
+            answer = "".join(pieces).strip()
             from_fallback = True
 
         # Translate-on-miss, through the resident model rather than a second one.
@@ -716,20 +774,23 @@ def ask_question(
             )
 
         sources, grounded, notice = _attribute_sources(answer, [] if from_fallback else prov, target_lang)
-        return AskResult(
-            question=question,
-            answer=answer,
-            language=target_lang,
-            top_k=int(top_k),
-            sources=sources,
-            grounded=grounded,
-            notice=notice,
-            retrieved=results,
-            filters_applied=where,
-            hybrid=bool(hybrid),
-            route=decision.route,
-            route_reason=decision.reason,
+        yield FinalEvent(
+            AskResult(
+                question=question,
+                answer=answer,
+                language=target_lang,
+                top_k=int(top_k),
+                sources=sources,
+                grounded=grounded,
+                notice=notice,
+                retrieved=results,
+                filters_applied=where,
+                hybrid=bool(hybrid),
+                route=decision.route,
+                route_reason=decision.reason,
+            )
         )
+        return
 
     # ---- Legacy single-model path (routing disabled) ---------------------
     # Build the grounded prompt (with compact, numbered context blocks)
@@ -743,14 +804,26 @@ def ask_question(
     # pipeline can be imported (and tested) without a compiled llama.cpp.
     from rag.generation import LlamaCppRunner
 
+    yield StageEvent("loading_model")
     runner = LlamaCppRunner()
-    answer = runner.chat(messages).strip()
+
+    yield StageEvent("generating")
+    pieces: list[str] = []
+    for piece in runner.chat_stream(messages):
+        pieces.append(piece)
+        yield TokenEvent(piece)
+    answer = "".join(pieces).strip()
 
     # If the model essentially said “I don’t know”, fall back to a short general answer (no citations).
     from_fallback = False
     if _looks_unknown(answer, target_lang):
         gm = build_general_messages(question)
-        answer = runner.chat(gm).strip()
+        yield ReplaceEvent("unknown_fallback")
+        pieces = []
+        for piece in runner.chat_stream(gm):
+            pieces.append(piece)
+            yield TokenEvent(piece)
+        answer = "".join(pieces).strip()
         from_fallback = True
 
     # Translate-on-miss (if enabled in cfg/env) — but preserve [n]
@@ -775,15 +848,17 @@ def ask_question(
         )
 
     sources, grounded, notice = _attribute_sources(answer, [] if from_fallback else prov, target_lang)
-    return AskResult(
-        question=question,
-        answer=answer,
-        language=target_lang,
-        top_k=int(top_k),
-        sources=sources,
-        grounded=grounded,
-        notice=notice,
-        retrieved=results,
-        filters_applied=where,
-        hybrid=bool(hybrid),
+    yield FinalEvent(
+        AskResult(
+            question=question,
+            answer=answer,
+            language=target_lang,
+            top_k=int(top_k),
+            sources=sources,
+            grounded=grounded,
+            notice=notice,
+            retrieved=results,
+            filters_applied=where,
+            hybrid=bool(hybrid),
+        )
     )
