@@ -1,0 +1,7 @@
+# Anthropic provider SDK, used when LLM_PROVIDER=anthropic.
+#
+# Optional on purpose: someone running a local GGUF should not have to
+# install a provider SDK they will never call.
+#
+#   pip install -e ".[anthropic]"
+anthropic>=0.40

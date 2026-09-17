@@ -31,6 +31,11 @@ _READ_RE = re.compile(
     r'_getenv_\w+\(\s*"([A-Z_0-9]+)"'
     r'|os\.getenv\(\s*"([A-Z_0-9]+)"'
     r'|os\.environ(?:\.get)?\(?\[?\s*"([A-Z_0-9]+)"'
+    # Credentials are read through the store (#95), which checks the
+    # environment first. Those are environment variables too, and leaving
+    # them out made the guard report them as documented-but-unread.
+    r'|_read_secret_setting\(\s*\n?\s*"([A-Z_0-9]+)"'
+    r'|read_secret\(\s*"([A-Z_0-9]+)"'
 )
 
 

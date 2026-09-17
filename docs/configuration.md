@@ -21,6 +21,8 @@ cp .env.example .env
 | `EMBEDDING_MODEL_NAME` | Sentence-Transformers model used for embeddings | `intfloat/multilingual-e5-base` |
 | `LLM_BACKEND` | Generation backend | `llama_cpp` |
 | `LLM_PROVIDER` | Which provider generates answers. `llama_cpp` runs locally | `llama_cpp` |
+| `ANTHROPIC_API_KEY` | Key for `LLM_PROVIDER=anthropic`. Prefer `rag config set` | unset |
+| `ANTHROPIC_MODEL` | Model for that provider | `claude-opus-5` |
 | `MODEL_PROFILE` | Sized model set: `light`, `balanced`, `heavy` or `custom`. See below | `custom` |
 | `LLM_MODEL_PATH` | Local `.gguf` file used when routing is off | `./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf` |
 | `LLM_REPO_ID` | Hugging Face repo to download the model from if it is missing | unset |
@@ -403,3 +405,22 @@ The first time a hosted provider is used in a session, the application
 prints what it is about to send, on stderr so it cannot end up in piped
 JSON. Every answer carries a `backend` field, so whether a given answer was
 local is never a question about configuration.
+
+## Using Anthropic
+
+```bash
+pip install -e ".[anthropic]"
+rag config set ANTHROPIC_API_KEY sk-ant-...
+LLM_PROVIDER=anthropic rag ask "What is the chain rule?" --course Maths
+```
+
+The SDK is an optional extra, so a local-only install does not carry it.
+The key belongs in the credential store rather than `.env`; see
+Credentials above.
+
+Read "Hosted providers and your documents" first. This sends your retrieved
+coursework to Anthropic and is billed per token.
+
+`ANTHROPIC_MODEL` picks the model. Subject routing has no effect here:
+routes exist to swap local GGUFs, and a hosted provider has one model per
+request instead.
