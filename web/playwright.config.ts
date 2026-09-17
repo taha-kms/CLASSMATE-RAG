@@ -25,7 +25,10 @@ export default defineConfig({
   // Preview serves the production build, so these exercise what actually
   // ships rather than the dev server.
   webServer: {
-    command: 'npm run preview -- --port 4173 --strictPort',
+    // --host 127.0.0.1 is load-bearing. vite preview binds 'localhost',
+    // which resolves to ::1 on the CI runner while Playwright polls the
+    // IPv4 address, so the server never appears to come up.
+    command: 'npm run preview -- --host 127.0.0.1 --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
