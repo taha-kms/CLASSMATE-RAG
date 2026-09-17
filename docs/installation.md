@@ -199,15 +199,43 @@ running.
 
 ### Matching your user
 
-The image runs as uid 1000. If yours differs, bind-mounted indexes come back
-owned by someone else:
+The image runs as uid 1000. If yours differs, anything the container writes
+into `./indexes` or `./models` comes back owned by someone else, and you
+cannot delete your own index without `sudo`.
+
+Compose runs the container as your user:
+
+```bash
+CLASSMATE_UID=$(id -u) CLASSMATE_GID=$(id -g) docker compose run --rm rag stats
+```
+
+Put those two in `.env` and they apply to every command. This is a runtime
+override, so a uid other than 1000 needs no rebuild. The build arguments of
+the same name only set the default baked into the image, which matters if
+you run `docker run` directly rather than through compose:
 
 ```bash
 CLASSMATE_UID=$(id -u) CLASSMATE_GID=$(id -g) docker compose build
 ```
 
 Note the names. `UID` is readonly in bash, so the obvious
-`UID=$(id -u) docker compose build` fails before docker is even reached.
+`UID=$(id -u) ...` fails before docker is even reached.
+
+### What persists
+
+Three host directories are mounted, and between them they hold everything
+expensive:
+
+| Path | Holds | Size |
+| --- | --- | --- |
+| `./models` | GGUF model files you supply | several GB |
+| `./models/hf_cache` | the downloaded embedding model | ~1.1 GB |
+| `./indexes` | Chroma, BM25 and the embedding cache | grows with the corpus |
+
+`HF_HOME` points at `/app/models/hf_cache`, which is inside the `./models`
+mount, so the embedding model is downloaded once rather than on every fresh
+container. Losing that mount means re-downloading about a gigabyte before
+the next question can be answered.
 
 ### Talking to the database
 
