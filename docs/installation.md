@@ -276,6 +276,45 @@ docker pull ghcr.io/taha-kms/classmate-rag:latest
 
 A tag containing a hyphen, `v0.2.0-rc1`, is published as a pre-release.
 
+## Supplying a model
+
+No model ships with the image. It would add several gigabytes to something
+everyone pulls, and which model suits you depends on your machine and what
+you are asking it.
+
+Everything except answering works without one:
+
+```bash
+docker compose run --rm rag add data/notes.pdf --course Maths
+docker compose run --rm rag preview "the chain rule" --course Maths
+docker compose run --rm rag stats
+```
+
+So you can ingest a corpus and confirm retrieval is sensible before
+committing to a download.
+
+To answer questions, put a `.gguf` in `./models` and point at it:
+
+```bash
+# in .env
+LLM_MODEL_PATH=./models/your-model.gguf
+```
+
+Or let it fetch one on first use:
+
+```bash
+# in .env
+LLM_REPO_ID=TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF
+LLM_FILENAME=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+```
+
+TinyLlama is about 640 MB and answers poorly; it is a good way to confirm
+the pipeline works end to end before downloading something serious. A 7B
+Q4_K_M is around 4.4 GB and is the usual choice.
+
+`./models` is a host mount, so a model survives the container being
+recreated and is downloaded once.
+
 ## Building a CUDA image yourself
 
 The published image is CPU-only, deliberately. `llama-cpp-python` has to be
