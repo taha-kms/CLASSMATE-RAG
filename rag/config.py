@@ -151,6 +151,11 @@ class Config:
     # Master toggle. When False, the pipeline uses the legacy single-model path.
     enable_routing: bool = False
 
+    # Named model profile: light | balanced | heavy | custom. "custom" uses
+    # the per-route ROUTE_*_MODEL_PATH values below verbatim, which is how
+    # this behaved before profiles existed.
+    model_profile: str = "custom"
+
     # Per-route GGUF paths. Empty strings disable that route (it falls back to
     # the default route). Override via env: ROUTE_<NAME>_MODEL_PATH.
     route_math_model_path: Path = Path("./models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf")
@@ -262,6 +267,7 @@ def load_config(reload: bool = False) -> Config:
         translate_on_miss=_getenv_bool("TRANSLATE_ON_MISS", False),
         log_level=_getenv_str("LOG_LEVEL", "INFO") or "INFO",
         enable_routing=_getenv_bool("ENABLE_ROUTING", False),
+        model_profile=(_getenv_str("MODEL_PROFILE", "custom") or "custom").strip().lower(),
         route_math_model_path=Path(
             _getenv_str("ROUTE_MATH_MODEL_PATH", "./models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf")
             or "./models/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf"

@@ -14,8 +14,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from rag.config import Config, load_config
+from rag.config import Config, load_config, resolve_data_path
 
+from .profiles import get_profile
 from .types import DEFAULT_ROUTE, Route
 
 
@@ -32,8 +33,20 @@ class ModelSpec:
 
 
 def route_model_paths(cfg: Config | None = None) -> dict[Route, Path]:
-    """Return the configured GGUF path for each route."""
+    """
+    The GGUF path for each route.
+
+    A named MODEL_PROFILE resolves to filenames under the models directory;
+    "custom", the default, uses the per-route ROUTE_*_MODEL_PATH settings
+    verbatim, which is how this worked before profiles existed.
+    """
     cfg = cfg or load_config()
+
+    profile = get_profile(getattr(cfg, "model_profile", "custom"))
+    if profile is not None:
+        models_dir = resolve_data_path("./models")
+        return {route: models_dir / choice.filename for route, choice in profile.models.items()}
+
     return {
         "math": cfg.route_math_model_path,
         "code": cfg.route_code_model_path,

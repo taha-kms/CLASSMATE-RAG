@@ -334,6 +334,59 @@ def cmd_preview(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_profiles(_args: argparse.Namespace) -> int:
+    """
+    Show the model profiles and which of them this machine can actually run.
+
+    The point is to answer "what should I download" before anything is
+    downloaded, rather than after.
+    """
+    from rag.config import load_config
+    from rag.routing.profiles import (
+        PROFILES,
+        check_fit,
+        detect_hardware,
+        recommend_profile,
+    )
+
+    hw = detect_hardware()
+    recommended = recommend_profile(hw)
+    active = getattr(load_config(), "model_profile", "custom")
+
+    profiles = []
+    for name, profile in PROFILES.items():
+        profiles.append(
+            {
+                "name": name,
+                "summary": profile.summary,
+                "download_gb": profile.total_download_gb,
+                "vram_gb": profile.peak_vram_gb,
+                "warnings": check_fit(name, hw),
+                "fits": not check_fit(name, hw),
+            }
+        )
+
+    print(
+        json.dumps(
+            {
+                "action": "profiles",
+                "active": active,
+                "recommended": recommended,
+                "hardware": {
+                    "vram_gb": hw.vram_gb,
+                    "ram_gb": hw.ram_gb,
+                    "free_disk_gb": hw.free_disk_gb,
+                    "summary": hw.describe(),
+                },
+                "profiles": profiles,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 def cmd_stats(_args: argparse.Namespace) -> int:
     """
     Show index health (counts + disk usage).
@@ -692,6 +745,12 @@ def build_parser() -> argparse.ArgumentParser:
     pp.set_defaults(func=cmd_preview)
 
     # --- stats ---
+    pp = sub.add_parser(
+        "profiles",
+        help="Show model profiles and which fit this machine",
+    )
+    pp.set_defaults(func=cmd_profiles)
+
     ps = sub.add_parser("stats", help="Show index health and disk usage")
     ps.set_defaults(func=cmd_stats)
 

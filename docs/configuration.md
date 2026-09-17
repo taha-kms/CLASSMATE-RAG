@@ -20,6 +20,7 @@ cp .env.example .env
 | --- | --- | --- |
 | `EMBEDDING_MODEL_NAME` | Sentence-Transformers model used for embeddings | `intfloat/multilingual-e5-base` |
 | `LLM_BACKEND` | Generation backend | `llama_cpp` |
+| `MODEL_PROFILE` | Sized model set: `light`, `balanced`, `heavy` or `custom`. See below | `custom` |
 | `LLM_MODEL_PATH` | Local `.gguf` file used when routing is off | `./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf` |
 | `LLM_REPO_ID` | Hugging Face repo to download the model from if it is missing | unset |
 | `LLM_FILENAME` | File to fetch from that repo | unset |
@@ -268,6 +269,44 @@ So a one-off override works as you'd expect, without editing `.env`:
 LOG_LEVEL=DEBUG rag ask "..."
 CHROMA_HOST_PORT=8001 docker compose up -d chroma
 ```
+
+## Model profiles
+
+`MODEL_PROFILE` picks a set of models sized for your machine, instead of
+naming four GGUFs by hand.
+
+```bash
+rag profiles
+```
+
+reports what it found and which profiles fit:
+
+```
+hardware   : VRAM 4.0 GB, RAM 15.4 GB, free disk 18.0 GB
+recommended: light
+  light       4.0 GB dl   2.8 GB vram  fits=True
+  balanced    8.8 GB dl   5.2 GB vram  fits=False
+       ! 5.2 GB of VRAM needed to offload fully, 4.0 GB present.
+  heavy      17.8 GB dl   9.7 GB vram  fits=False
+```
+
+| Profile | Models | Download | VRAM to offload |
+| --- | --- | --- | --- |
+| `light` | 3B | ~4 GB | ~2.8 GB |
+| `balanced` | 7B | ~8.8 GB | ~5.2 GB |
+| `heavy` | 14B | ~17.8 GB | ~9.7 GB |
+| `custom` | whatever `ROUTE_*_MODEL_PATH` says | — | — |
+
+`custom` is the default and preserves the previous behaviour exactly.
+
+"Does not fit" is a warning, not a refusal. A model too large for the GPU
+still runs on CPU; it is just slow, and that is your call to make. Only one
+model is resident at a time, so the VRAM figure is the largest single
+model rather than the sum.
+
+The recommendation is deliberately conservative: with no GPU detected it
+suggests `light`, because everything runs on CPU eventually and pointing
+someone at a 14B model they will wait minutes for is not helpful.
 
 ## What subject routing actually costs
 
