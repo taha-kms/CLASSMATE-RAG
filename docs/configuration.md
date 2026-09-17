@@ -290,6 +290,12 @@ recommended: light
   heavy      17.8 GB dl   9.7 GB vram  fits=False
 ```
 
+Once chosen, fetch what it needs:
+
+```bash
+rag model download --profile light
+```
+
 | Profile | Models | Download | VRAM to offload |
 | --- | --- | --- | --- |
 | `light` | 3B | ~4 GB | ~2.8 GB |
