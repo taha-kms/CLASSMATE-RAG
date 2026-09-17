@@ -11,7 +11,6 @@ Returns: list[(page_number, text)]
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Tuple
 
 from bs4 import BeautifulSoup
 from ebooklib import epub  # type: ignore
@@ -29,11 +28,11 @@ def _extract_text_from_html(html: bytes | str) -> str:
     return "\n".join(lines)
 
 
-def load_epub(path: str | Path) -> List[Tuple[int, str]]:
+def load_epub(path: str | Path) -> list[tuple[int, str]]:
     p = Path(path).expanduser().resolve()
     book = epub.read_epub(str(p))  # type: ignore
 
-    pages: List[Tuple[int, str]] = []
+    pages: list[tuple[int, str]] = []
     page = 1
     for item in book.get_items():  # type: ignore
         if item.get_type() == epub.ITEM_DOCUMENT:  # type: ignore

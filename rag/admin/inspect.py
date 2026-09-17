@@ -9,8 +9,8 @@ Functions:
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Dict, List, Mapping
 
 from rag.config import load_config
 from rag.embeddings import E5MultilingualEmbedder
@@ -50,7 +50,7 @@ def retrieve_preview(
     filters: Mapping[str, object] | None = None,
     top_k: int = 8,
     hybrid: bool = True,
-) -> List[Dict[str, object]]:
+) -> list[dict[str, object]]:
     """
     Run retrieval only (no generation).
     Returns a list of items with:
@@ -106,7 +106,7 @@ def retrieve_preview(
     return preview
 
 
-def index_stats() -> Dict[str, object]:
+def index_stats() -> dict[str, object]:
     """
     Report index health.
     Returns:

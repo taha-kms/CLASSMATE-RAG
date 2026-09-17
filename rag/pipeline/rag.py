@@ -21,11 +21,12 @@ Design notes
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING
 
 from rag.chunking import chunk_text
 
@@ -95,18 +96,18 @@ class AskResult:
     answer: str
     language: str
     top_k: int
-    sources: List[Source]  # only what the answer cited, numbers matching the [n] markers
-    retrieved: List[Dict[str, object]]  # raw retrieved items (id, metadata, scores…)
-    filters_applied: Dict[str, object]
+    sources: list[Source]  # only what the answer cited, numbers matching the [n] markers
+    retrieved: list[dict[str, object]]  # raw retrieved items (id, metadata, scores…)
+    filters_applied: dict[str, object]
     hybrid: bool
     # False when the answer cites nothing, so it came from the model rather
     # than from the ingested documents.
     grounded: bool = True
     # Short line a UI can show muted next to an ungrounded answer.
-    notice: Optional[str] = None
+    notice: str | None = None
     # Populated when routing is enabled; None on the legacy single-model path.
-    route: Optional[str] = None
-    route_reason: Optional[str] = None
+    route: str | None = None
+    route_reason: str | None = None
 
 
 _UNGROUNDED_NOTICE = {
@@ -115,7 +116,7 @@ _UNGROUNDED_NOTICE = {
 }
 
 
-def _attribute_sources(answer: str, provenance: List[str], language: str) -> tuple[List[Source], bool, Optional[str]]:
+def _attribute_sources(answer: str, provenance: list[str], language: str) -> tuple[list[Source], bool, str | None]:
     """
     Pair the answer's [n] markers with their provenance.
 
@@ -136,12 +137,12 @@ def _attribute_sources(answer: str, provenance: List[str], language: str) -> tup
 # The classifier embeds prototype phrases once; reusing the instance avoids
 # repeating that work on every ingest/ask. The loader holds at most one
 # llama.cpp model resident across calls.
-_SUBJECT_CLASSIFIER: Optional[SubjectClassifier] = None
-_HYBRID_ROUTER: Optional[HybridRouter] = None
-_MODEL_LOADER: Optional[StickyModelLoader] = None
+_SUBJECT_CLASSIFIER: SubjectClassifier | None = None
+_HYBRID_ROUTER: HybridRouter | None = None
+_MODEL_LOADER: StickyModelLoader | None = None
 
 
-def _get_subject_classifier(embedder: Optional["E5MultilingualEmbedder"] = None) -> "SubjectClassifier":
+def _get_subject_classifier(embedder: E5MultilingualEmbedder | None = None) -> SubjectClassifier:
     """Lazy singleton. Pass an embedder to share E5 with the ingest path."""
     global _SUBJECT_CLASSIFIER
     if _SUBJECT_CLASSIFIER is None:
@@ -151,7 +152,7 @@ def _get_subject_classifier(embedder: Optional["E5MultilingualEmbedder"] = None)
     return _SUBJECT_CLASSIFIER
 
 
-def _get_hybrid_router() -> "HybridRouter":
+def _get_hybrid_router() -> HybridRouter:
     global _HYBRID_ROUTER
     if _HYBRID_ROUTER is None:
         from rag.routing import HybridRouter
@@ -166,7 +167,7 @@ def _get_hybrid_router() -> "HybridRouter":
     return _HYBRID_ROUTER
 
 
-def _get_model_loader() -> "StickyModelLoader":
+def _get_model_loader() -> StickyModelLoader:
     global _MODEL_LOADER
     if _MODEL_LOADER is None:
         from rag.routing import StickyModelLoader
@@ -175,7 +176,7 @@ def _get_model_loader() -> "StickyModelLoader":
     return _MODEL_LOADER
 
 
-def _folder_subject_hint(p: Path) -> Optional[str]:
+def _folder_subject_hint(p: Path) -> str | None:
     """
     Map the parent folder name to a canonical route, when it matches a known
     alias (math/code/translation/default + a few synonyms). Returns None for
@@ -218,7 +219,7 @@ def _slug_tag(t: str) -> str:
     return s.strip("_")
 
 
-def _parse_tags(obj) -> List[str]:
+def _parse_tags(obj) -> list[str]:
     """Accept comma-separated string or list/tuple; return clean list."""
     if not obj:
         return []
@@ -226,7 +227,7 @@ def _parse_tags(obj) -> List[str]:
         vals = [str(x) for x in obj]
     else:
         vals = str(obj).split(",")
-    out: List[str] = []
+    out: list[str] = []
     for v in vals:
         v = v.strip()
         if v:
@@ -234,12 +235,12 @@ def _parse_tags(obj) -> List[str]:
     return out
 
 
-def _expand_tag_flags(tags_field) -> Dict[str, bool]:
+def _expand_tag_flags(tags_field) -> dict[str, bool]:
     """
     Convert tags to booleans: "oop,exam" -> {"tag_oop": True, "tag_exam": True}
     This keeps the vector DB metadata simple and filterable.
     """
-    flags: Dict[str, bool] = {}
+    flags: dict[str, bool] = {}
     for t in _parse_tags(tags_field):
         slug = _slug_tag(t)
         if slug:
@@ -247,12 +248,12 @@ def _expand_tag_flags(tags_field) -> Dict[str, bool]:
     return flags
 
 
-def _sanitize_metadata(meta: Dict[str, object]) -> Dict[str, object]:
+def _sanitize_metadata(meta: dict[str, object]) -> dict[str, object]:
     """
     Keep only types allowed by the thin Chroma client (str, int, float, bool).
     Drop None/empty. Also expand tags -> tag_* booleans. Keep page/chunk_id ints.
     """
-    clean: Dict[str, object] = {}
+    clean: dict[str, object] = {}
 
     # Expand tag flags first, then drop original 'tags'
     if "tags" in meta:
@@ -293,12 +294,12 @@ def _sanitize_metadata(meta: Dict[str, object]) -> Dict[str, object]:
 
 
 def _concurrent_chunk_pages(
-    pages: Sequence[Tuple[int, str]],
+    pages: Sequence[tuple[int, str]],
     *,
     chunk_size: int,
     chunk_overlap: int,
     max_workers: int,
-) -> List[Tuple[int, int, str]]:
+) -> list[tuple[int, int, str]]:
     """
     Concurrent page-wise chunking using a bounded thread pool.
     Returns flattened (page, global_chunk_id, text) tuples. The chunk_id is
@@ -306,7 +307,7 @@ def _concurrent_chunk_pages(
     stable IDs.
     """
     # 1) Chunk each page independently, in parallel
-    results: Dict[int, List[str]] = {}
+    results: dict[int, list[str]] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         fut2page = {
             ex.submit(
@@ -329,7 +330,7 @@ def _concurrent_chunk_pages(
             results[page] = [c.text for c in chs if (c.text or "").strip()]
 
     # 2) Flatten in page order and assign a single global chunk_id sequence
-    out: List[Tuple[int, int, str]] = []
+    out: list[tuple[int, int, str]] = []
     next_cid = 0
     for page, blocks in sorted(results.items(), key=lambda kv: kv[0]):
         for text in blocks:
@@ -384,9 +385,9 @@ def ingest_file(
     created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Collect per-chunk arrays ready for upsert
-    ids: List[str] = []
-    texts: List[str] = []
-    metas: List[Dict[str, object]] = []
+    ids: list[str] = []
+    texts: list[str] = []
+    metas: list[dict[str, object]] = []
 
     # Components (embedder + caches + stores)
     from rag.embeddings import E5MultilingualEmbedder
@@ -401,7 +402,7 @@ def ingest_file(
     # when routing is enabled). When routing is disabled we still accept an
     # explicit subject so future re-ingests aren't lossy, but we don't pay
     # for auto-classification.
-    resolved_subject: Optional[str] = None
+    resolved_subject: str | None = None
     if doc_meta.subject:
         resolved_subject = doc_meta.subject
     else:
@@ -488,8 +489,8 @@ def ingest_file(
 
 
 def _apply_expansion_and_diversity(
-    results: List[Dict[str, object]],
-) -> List[Dict[str, object]]:
+    results: list[dict[str, object]],
+) -> list[dict[str, object]]:
     """
     Expand each top hit with its neighbor chunks (same doc, adjacent chunk_ids)
     and cap how many chunks per doc we keep to balance breadth vs depth.
@@ -534,7 +535,7 @@ def _needs_translation(answer: str, target_lang: str) -> bool:
     return det in {"en", "it"} and det != target_lang
 
 
-def _translate_text(text: str, target_lang: str, *, chat: Callable[[List[Dict[str, str]]], str]) -> str:
+def _translate_text(text: str, target_lang: str, *, chat: Callable[[list[dict[str, str]]], str]) -> str:
     """
     Translate to `target_lang`, asking the model to preserve bracketed
     citations like [1], [2] exactly.
@@ -571,7 +572,7 @@ def ask_question(
     filters: DocumentMetadata,
     top_k: int = 8,
     hybrid: bool = True,
-    forced_subject: Optional[str] = None,
+    forced_subject: str | None = None,
 ) -> AskResult:
     """
     Full RAG query path:
@@ -635,7 +636,7 @@ def ask_question(
     # matching GGUF, and we use route-specific system prompts. The legacy
     # single-runner path below is kept untouched for cfg.enable_routing=False.
     if cfg.enable_routing:
-        forced_route: Optional[Route] = None
+        forced_route: Route | None = None
         candidate = forced_subject or (filters.subject if hasattr(filters, "subject") else None)
         if isinstance(candidate, str) and candidate in ROUTES:
             forced_route = candidate  # type: ignore[assignment]

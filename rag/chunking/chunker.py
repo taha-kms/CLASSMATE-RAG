@@ -10,8 +10,8 @@ Functions provided:
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence, Tuple
 
 # Regex to detect sentence boundaries (period/question mark/exclamation mark).
 # Handles uppercase, quotes, and newlines after punctuation.
@@ -74,18 +74,18 @@ def _normalize_for_split(text: str) -> str:
     return out.strip()
 
 
-def _split_paragraphs(text: str) -> List[str]:
+def _split_paragraphs(text: str) -> list[str]:
     """Split text into paragraphs (separated by 2+ newlines)."""
     return [p for p in re.split(r"\n{2,}", text) if p.strip()]
 
 
-def _split_sentences_in_paragraph(par: str) -> List[str]:
+def _split_sentences_in_paragraph(par: str) -> list[str]:
     """
     Split one paragraph into sentences.
     Avoid splitting after known abbreviations.
     """
     parts = _SENT_BOUNDARY.split(par)
-    out: List[str] = []
+    out: list[str] = []
     buf = ""
     for part in parts:
         seg = part.strip()
@@ -106,12 +106,12 @@ def _split_sentences_in_paragraph(par: str) -> List[str]:
     return out
 
 
-def sentence_split(text: str) -> List[str]:
+def sentence_split(text: str) -> list[str]:
     """Split text into a clean list of sentences."""
     t = _normalize_for_split(text)
     if not t:
         return []
-    sents: List[str] = []
+    sents: list[str] = []
     for par in _split_paragraphs(t):
         sents.extend(_split_sentences_in_paragraph(par))
     return sents
@@ -122,13 +122,13 @@ def sentence_split(text: str) -> List[str]:
 # ------------------------------
 
 
-def _pack_sentences(sents: Sequence[str], *, chunk_size: int) -> List[List[str]]:
+def _pack_sentences(sents: Sequence[str], *, chunk_size: int) -> list[list[str]]:
     """
     Pack sentences into groups that fit within chunk_size characters.
     If a sentence is too long, split it into smaller pieces.
     """
-    chunks: List[List[str]] = []
-    cur: List[str] = []
+    chunks: list[list[str]] = []
+    cur: list[str] = []
     cur_len = 0
 
     def flush():
@@ -159,7 +159,7 @@ def _pack_sentences(sents: Sequence[str], *, chunk_size: int) -> List[List[str]]
     return chunks
 
 
-def _compute_sentence_overlap(sent_block: List[str], target_overlap_chars: int) -> int:
+def _compute_sentence_overlap(sent_block: list[str], target_overlap_chars: int) -> int:
     """
     Decide how many sentences from the previous chunk should overlap
     with the next one, based on target overlap in characters.
@@ -183,7 +183,7 @@ def chunk_text(
     chunk_overlap: int = 150,
     page: int = 1,
     starting_chunk_id: int = 0,
-) -> List[RagChunk]:
+) -> list[RagChunk]:
     """
     Split text into overlapping chunks of sentences.
     Returns a list of RagChunk objects.
@@ -194,7 +194,7 @@ def chunk_text(
             return [RagChunk(page=page, chunk_id=starting_chunk_id, text=text.strip())]
         return []
     packed = _pack_sentences(sents, chunk_size=chunk_size)
-    overlapped: List[List[str]] = []
+    overlapped: list[list[str]] = []
     for i, block in enumerate(packed):
         if i == 0:
             overlapped.append(block)
@@ -203,7 +203,7 @@ def chunk_text(
         n_overlap = _compute_sentence_overlap(prev, chunk_overlap)
         merged = (prev[-n_overlap:] + block) if n_overlap > 0 else block
         overlapped.append(merged)
-    chunks: List[RagChunk] = []
+    chunks: list[RagChunk] = []
     cid = starting_chunk_id
     for block in overlapped:
         txt = " ".join(block).strip()
@@ -214,17 +214,17 @@ def chunk_text(
 
 
 def chunk_pages(
-    pages: Iterable[Tuple[int, str]],
+    pages: Iterable[tuple[int, str]],
     *,
     chunk_size: int = 1000,
     chunk_overlap: int = 150,
     starting_chunk_id: int = 0,
-) -> List[Tuple[int, int, str]]:
+) -> list[tuple[int, int, str]]:
     """
     Apply chunking across multiple pages.
     Returns list of tuples: (page number, chunk ID, chunk text).
     """
-    out: List[Tuple[int, int, str]] = []
+    out: list[tuple[int, int, str]] = []
     cid = starting_chunk_id
     for page, text in pages:
         chs = chunk_text(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap, page=page, starting_chunk_id=cid)

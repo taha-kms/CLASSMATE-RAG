@@ -116,7 +116,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 # --- Internal imports: CLI <-> RAG system glue -------------------------------
 # Only lightweight, dependency-free modules are imported at module load. Heavier
@@ -515,7 +514,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
     from rag.admin.manage import delete_by_ids, resolve_ids
 
     # Resolve target IDs from (id | path | filters)
-    ids: List[str] = []
+    ids: list[str] = []
     if args.id:
         ids = list(args.id)
     elif args.path:
@@ -565,7 +564,7 @@ def cmd_reingest(args: argparse.Namespace) -> int:
         show_entries_by_id,
     )
 
-    targets: List[str] = []
+    targets: list[str] = []
 
     if args.path:
         # Accept multiple --path flags
@@ -787,7 +786,7 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """
     Entrypoint for module execution:
       - Parse CLI args

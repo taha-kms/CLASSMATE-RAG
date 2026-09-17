@@ -11,9 +11,10 @@ We always supply embeddings explicitly (from E5).
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -28,7 +29,7 @@ def _slug_tag(t: str) -> str:
     return s.strip("_")
 
 
-def _parse_tags(obj) -> List[str]:
+def _parse_tags(obj) -> list[str]:
     if not obj:
         return []
     if isinstance(obj, (list, tuple)):
@@ -43,7 +44,7 @@ def _parse_tags(obj) -> List[str]:
     return out
 
 
-def build_where_filter(meta_like: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+def build_where_filter(meta_like: Mapping[str, Any]) -> dict[str, Any] | None:
     """
     Build a Chroma 'where' dict from simple CLI-style filters.
     - Equality on simple fields.
@@ -53,7 +54,7 @@ def build_where_filter(meta_like: Mapping[str, Any]) -> Optional[Dict[str, Any]]
     if not meta_like:
         return None
 
-    clauses: List[Dict[str, Any]] = []
+    clauses: list[dict[str, Any]] = []
 
     for f in ["course", "unit", "language", "doc_type", "author", "semester"]:
         v = meta_like.get(f)
@@ -85,8 +86,8 @@ class ChromaVectorStore:
     collection_name: str = "classmate_rag"
     distance: str = "cosine"
 
-    _client: Optional[Any] = None
-    _collection: Optional[Any] = None
+    _client: Any | None = None
+    _collection: Any | None = None
     _mode_http: bool = False
 
     def _import_chromadb(self):
@@ -224,11 +225,11 @@ class ChromaVectorStore:
         self,
         *,
         query_embeddings: np.ndarray,
-        where: Optional[Dict[str, Any]] = None,  # already Chroma-style
+        where: dict[str, Any] | None = None,  # already Chroma-style
         top_k: int = 8,
         include_documents: bool = True,
         include_embeddings: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         q = query_embeddings.astype("float32")
         if q.ndim == 1:
             q = q[None, :]
@@ -258,7 +259,7 @@ class ChromaVectorStore:
         dists = (res.get("distances") or [[]])[0]
         embs = (res.get("embeddings") or [[]])[0] if include_embeddings else [None] * len(ids)
 
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for i in range(len(ids)):
             item = {
                 "id": ids[i],
@@ -288,7 +289,7 @@ class ChromaVectorStore:
         self._ensure_collection()
 
     @classmethod
-    def from_config(cls) -> "ChromaVectorStore":
+    def from_config(cls) -> ChromaVectorStore:
         cfg = load_config()
         return cls(
             persist_dir=cfg.chroma_persist_directory,

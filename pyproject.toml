@@ -38,17 +38,24 @@ target-version = "py310"
 exclude = [".venv", "indexes", "models", "data"]
 
 [tool.ruff.lint]
-# Deliberately not the full default set yet. pyupgrade (UP) alone would
-# rewrite 464 annotations across every file, which belongs in its own change.
-select = ["E", "F", "I", "B", "C4"]
+# BLE001 (blind except) and S110 (try-except-pass) are deliberately absent:
+# they are not mechanical. Each one is a judgement call about whether the
+# handler is hiding a real failure, and #41 and #100 were both cases where
+# it was. Tracked separately rather than bulk-silenced.
+select = ["E", "F", "I", "B", "C4", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 # The project .env has to be read before transformers is imported, so the
 # import order in this module is load-bearing.
 "cli/main.py" = ["E402"]
-# Lazy re-exports are resolved through __getattr__; the TYPE_CHECKING imports
-# exist for editors and type checkers, not at runtime.
-"rag/*/__init__.py" = ["F401"]
+# The lazy re-export shims resolve their exports through __getattr__, so the
+# TYPE_CHECKING imports exist for editors and type checkers rather than at
+# runtime. Listed individually: a blanket rag/*/__init__.py also covered the
+# packages whose __init__ holds real code, and hid genuinely dead imports
+# there.
+"rag/retrieval/__init__.py" = ["F401"]
+"rag/generation/__init__.py" = ["F401"]
+"rag/routing/__init__.py" = ["F401"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["rag", "cli"]

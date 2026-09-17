@@ -19,9 +19,7 @@ Notes
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import List, Tuple
 
 # html_readable pulls in bs4/readability-lxml and epub_loader pulls in
 # ebooklib. They are imported inside load_document_by_type() so that
@@ -76,24 +74,24 @@ def infer_doc_type_from_path(path: str | Path) -> str:
 # -----------------------
 
 
-def _load_txt(path: Path) -> List[Tuple[int, str]]:
+def _load_txt(path: Path) -> list[tuple[int, str]]:
     txt = path.read_text(encoding="utf-8", errors="ignore")
     txt = (txt or "").strip()
     return [(1, txt)] if txt else []
 
 
-def _load_md(path: Path) -> List[Tuple[int, str]]:
+def _load_md(path: Path) -> list[tuple[int, str]]:
     # Keep markdown markup; later chunker/tokenizer deals with structure.
     md = path.read_text(encoding="utf-8", errors="ignore")
     md = (md or "").strip()
     return [(1, md)] if md else []
 
 
-def _load_pdf(path: Path) -> List[Tuple[int, str]]:
+def _load_pdf(path: Path) -> list[tuple[int, str]]:
     if pypdf is None:
         raise RuntimeError("pypdf is not installed; cannot load PDF")
     reader = pypdf.PdfReader(str(path))  # type: ignore
-    pages: List[Tuple[int, str]] = []
+    pages: list[tuple[int, str]] = []
     for i, page in enumerate(reader.pages, start=1):  # type: ignore
         try:
             text = page.extract_text() or ""
@@ -105,7 +103,7 @@ def _load_pdf(path: Path) -> List[Tuple[int, str]]:
     return pages
 
 
-def _load_docx(path: Path) -> List[Tuple[int, str]]:
+def _load_docx(path: Path) -> list[tuple[int, str]]:
     if docx is None:
         raise RuntimeError("python-docx is not installed; cannot load DOCX")
     doc = docx.Document(str(path))  # type: ignore
@@ -115,13 +113,13 @@ def _load_docx(path: Path) -> List[Tuple[int, str]]:
     return [(1, text)] if text else []
 
 
-def _load_pptx(path: Path) -> List[Tuple[int, str]]:
+def _load_pptx(path: Path) -> list[tuple[int, str]]:
     if pptx is None:
         raise RuntimeError("python-pptx is not installed; cannot load PPTX")
     prs = pptx.Presentation(str(path))  # type: ignore
-    pages: List[Tuple[int, str]] = []
+    pages: list[tuple[int, str]] = []
     for i, slide in enumerate(prs.slides, start=1):  # type: ignore
-        chunks: List[str] = []
+        chunks: list[str] = []
         for shape in slide.shapes:  # type: ignore
             try:
                 if hasattr(shape, "text"):
@@ -146,7 +144,7 @@ def load_document_by_type(
     doc_type: str,
     *,
     enable_ocr: bool = False,  # kept for API compatibility; not used here
-) -> List[Tuple[int, str]]:
+) -> list[tuple[int, str]]:
     """
     Route to the specific loader based on doc_type (string).
     """

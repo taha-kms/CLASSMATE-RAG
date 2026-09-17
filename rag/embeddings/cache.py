@@ -10,8 +10,8 @@ Features:
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
@@ -47,7 +47,7 @@ class CachingEmbedder:
     - Saves vectors to disk to avoid recomputation.
     """
 
-    def __init__(self, base, cache_dir: Optional[str] = None) -> None:
+    def __init__(self, base, cache_dir: str | None = None) -> None:
         self.base = base
         root = cache_dir or load_config().emb_cache_directory
         self.root = Path(root).expanduser().resolve()
@@ -80,7 +80,7 @@ class CachingEmbedder:
 
     def _get_many(
         self, mode: str, texts: Iterable[str]
-    ) -> Tuple[List[Optional[np.ndarray]], List[int], List[str], List[Path]]:
+    ) -> tuple[list[np.ndarray | None], list[int], list[str], list[Path]]:
         """
         Check cache for a list of texts.
 
@@ -91,10 +91,10 @@ class CachingEmbedder:
           - miss_paths: file paths where new vecs will be saved
         """
         self._ensure_mode_dir(mode)
-        cached: List[Optional[np.ndarray]] = []
-        miss_idx: List[int] = []
-        miss_texts: List[str] = []
-        miss_paths: List[Path] = []
+        cached: list[np.ndarray | None] = []
+        miss_idx: list[int] = []
+        miss_texts: list[str] = []
+        miss_paths: list[Path] = []
 
         for i, t in enumerate(texts):
             fp = self._key_path(mode, t)
@@ -112,9 +112,9 @@ class CachingEmbedder:
         return cached, miss_idx, miss_texts, miss_paths
 
     @staticmethod
-    def _fill(cached: List[Optional[np.ndarray]], miss_idx: List[int], miss_vecs: np.ndarray) -> np.ndarray:
+    def _fill(cached: list[np.ndarray | None], miss_idx: list[int], miss_vecs: np.ndarray) -> np.ndarray:
         """Merge cached and newly computed vectors into a single array."""
-        out: List[np.ndarray] = []
+        out: list[np.ndarray] = []
         it = iter(miss_vecs)
         for slot in cached:
             if slot is None:

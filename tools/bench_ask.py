@@ -10,14 +10,13 @@ from __future__ import annotations
 import argparse
 import statistics
 import time
-from typing import List
 
 from rag.metadata import normalize_cli_metadata
 from rag.pipeline import ask_question
 
 
 def bench(question: str, n: int, k: int, subject: str | None = None) -> None:
-    latencies: List[float] = []
+    latencies: list[float] = []
     filters = normalize_cli_metadata(language="auto", subject=subject)
 
     for i in range(n):

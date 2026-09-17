@@ -8,14 +8,15 @@ Includes:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 
 def format_context_blocks(
-    retrieved: Sequence[Dict[str, Any]],
+    retrieved: Sequence[dict[str, Any]],
     *,
     max_total_chars: int | None = 2000,
-) -> Tuple[str, List[str]]:
+) -> tuple[str, list[str]]:
     """
     Turn retrieved results into a single text block and a list of sources.
 
@@ -27,8 +28,8 @@ def format_context_blocks(
         context_text: concatenated chunks with [n] labels
         provenance: list of source descriptions in the same order
     """
-    blocks: List[str] = []
-    prov: List[str] = []
+    blocks: list[str] = []
+    prov: list[str] = []
     total_chars = 0
     for i, r in enumerate(retrieved, start=1):
         text = (r.get("document") or "").strip()
@@ -50,7 +51,7 @@ def build_grounded_messages(
     context_text: str,
     *,
     citations_required: bool = True,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     """
     Build a grounded prompt (with context and citations).
 
@@ -76,7 +77,7 @@ def build_grounded_messages(
     return [{"role": "system", "content": sys}, {"role": "user", "content": user}]
 
 
-def build_general_messages(question: str) -> List[Dict[str, str]]:
+def build_general_messages(question: str) -> list[dict[str, str]]:
     """
     Build a simple prompt without context (general Q&A).
     """

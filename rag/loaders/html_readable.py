@@ -13,7 +13,6 @@ Dependencies:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Tuple
 
 from bs4 import BeautifulSoup
 from readability import Document  # type: ignore
@@ -34,7 +33,7 @@ def _fallback_bs(html: str) -> str:
     return "\n".join(lines)
 
 
-def load_html_readable(path: str | Path) -> List[Tuple[int, str]]:
+def load_html_readable(path: str | Path) -> list[tuple[int, str]]:
     p = Path(path).expanduser().resolve()
     html = _read_file(p)
 

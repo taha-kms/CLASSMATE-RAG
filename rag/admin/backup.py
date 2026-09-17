@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Dict, Iterator, List, Tuple
 
 import numpy as np
 
@@ -39,7 +39,7 @@ def _sha1_text(s: str) -> str:
     return _sha1_bytes((s or "").encode("utf-8", "ignore"))
 
 
-def _iter_bm25_catalog(path: Path | None = None) -> Iterator[Tuple[str, str, Dict[str, object]]]:
+def _iter_bm25_catalog(path: Path | None = None) -> Iterator[tuple[str, str, dict[str, object]]]:
     """
     Yield all entries from the BM25 catalog.
     Each line contains (id, text, metadata).
@@ -64,7 +64,7 @@ def _iter_bm25_catalog(path: Path | None = None) -> Iterator[Tuple[str, str, Dic
                 yield cid, text, dict(meta)
 
 
-def _batched(items: List, n: int) -> Iterator[List]:
+def _batched(items: list, n: int) -> Iterator[list]:
     """Split a list into batches of size n."""
     if n <= 0:
         n = 256
@@ -153,7 +153,7 @@ def restore_dump(
     if not lines:
         return 0
 
-    items: List[Tuple[str, str, Dict[str, object]]] = []
+    items: list[tuple[str, str, dict[str, object]]] = []
     for ln in lines:
         try:
             obj = json.loads(ln)
@@ -181,7 +181,7 @@ def restore_dump(
     return restored
 
 
-def vacuum_indexes() -> Dict[str, str]:
+def vacuum_indexes() -> dict[str, str]:
     """
     Compact and clean indexes.
     - BM25: rewrite JSONL file.
@@ -212,7 +212,7 @@ def rebuild_embeddings(
     new_model_name: str,
     *,
     batch_size: int = 256,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     """
     Recompute embeddings for all texts using a new model.
     Updates the vector store but keeps BM25 unchanged.

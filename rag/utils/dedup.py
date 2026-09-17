@@ -11,7 +11,7 @@ Public API:
 from __future__ import annotations
 
 import re
-from typing import Iterable, List, Set, Tuple
+from collections.abc import Iterable
 
 _WS = re.compile(r"\s+")
 _PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
@@ -24,14 +24,14 @@ def _norm_tokens(s: str) -> list[str]:
     return s.split() if s else []
 
 
-def _shingles(tokens: Iterable[str], k: int = 5) -> Set[Tuple[str, ...]]:
+def _shingles(tokens: Iterable[str], k: int = 5) -> set[tuple[str, ...]]:
     toks = list(tokens)
     if len(toks) < k:
         return {tuple(toks)} if toks else set()
     return {tuple(toks[i : i + k]) for i in range(0, len(toks) - k + 1)}
 
 
-def _jaccard(a: Set[Tuple[str, ...]], b: Set[Tuple[str, ...]]) -> float:
+def _jaccard(a: set[tuple[str, ...]], b: set[tuple[str, ...]]) -> float:
     if not a and not b:
         return 1.0
     if not a or not b:
@@ -41,7 +41,7 @@ def _jaccard(a: Set[Tuple[str, ...]], b: Set[Tuple[str, ...]]) -> float:
     return inter / union if union else 0.0
 
 
-def dedup_block_indices(blocks: List[str], *, jaccard_threshold: float = 0.92) -> List[int]:
+def dedup_block_indices(blocks: list[str], *, jaccard_threshold: float = 0.92) -> list[int]:
     """
     Indices of the blocks to keep, in order.
 
@@ -49,8 +49,8 @@ def dedup_block_indices(blocks: List[str], *, jaccard_threshold: float = 0.92) -
     (page numbers, chunk ids) without matching strings back up afterwards,
     which is both fragile and quadratic when blocks repeat.
     """
-    kept: List[int] = []
-    kept_sh: List[Set[Tuple[str, ...]]] = []
+    kept: list[int] = []
+    kept_sh: list[set[tuple[str, ...]]] = []
 
     for i, text in enumerate(blocks):
         sh = _shingles(_norm_tokens(text), k=5)
@@ -62,7 +62,7 @@ def dedup_block_indices(blocks: List[str], *, jaccard_threshold: float = 0.92) -
     return kept
 
 
-def dedup_text_blocks(blocks: List[str], *, jaccard_threshold: float = 0.92) -> List[str]:
+def dedup_text_blocks(blocks: list[str], *, jaccard_threshold: float = 0.92) -> list[str]:
     """
     Preserve order; drop any block whose shingle Jaccard with any previously
     kept block exceeds threshold.

@@ -10,7 +10,7 @@ What this does:
 from __future__ import annotations
 
 import re
-from typing import Iterable, List, Set
+from collections.abc import Iterable
 
 # --- Patterns for citation tokens and fixing spacing between them ---
 
@@ -18,7 +18,7 @@ _CIT_RE = re.compile(r"\[(\d+)\]")  # matches [number]
 _ADJ_RE = re.compile(r"\]\s*(?:,?\s*)\[")  # matches "] [", "], [", "]   [", etc.
 
 
-def cited_indices(text: str) -> List[int]:
+def cited_indices(text: str) -> list[int]:
     """
     The [n] numbers an answer actually uses, de-duplicated, in order of first
     appearance. Callers use this to report only the sources the answer drew
@@ -27,15 +27,15 @@ def cited_indices(text: str) -> List[int]:
     return _dedupe_preserve_order(_extract_citation_indices(text))
 
 
-def _extract_citation_indices(text: str) -> List[int]:
+def _extract_citation_indices(text: str) -> list[int]:
     """Return all citation numbers found in the text (as ints)."""
     return [int(m.group(1)) for m in _CIT_RE.finditer(text or "")]
 
 
-def _dedupe_preserve_order(nums: Iterable[int]) -> List[int]:
+def _dedupe_preserve_order(nums: Iterable[int]) -> list[int]:
     """Remove duplicates from a sequence while preserving the original order."""
-    seen: Set[int] = set()
-    out: List[int] = []
+    seen: set[int] = set()
+    out: list[int] = []
     for n in nums:
         if n not in seen:
             seen.add(n)
@@ -60,7 +60,7 @@ def _remove_out_of_range(text: str, *, max_idx: int) -> str:
     return cleaned
 
 
-def _format_sources_block(cited_idxs: List[int], provenance: List[str], title: str) -> str:
+def _format_sources_block(cited_idxs: list[int], provenance: list[str], title: str) -> str:
     """
     Build a human-readable list of the cited sources in order of citation.
     Only indices that exist are included.
@@ -76,7 +76,7 @@ def _format_sources_block(cited_idxs: List[int], provenance: List[str], title: s
 
 def enforce_citations(
     answer: str,
-    provenance: List[str],
+    provenance: list[str],
     *,
     add_sources_block: bool = False,
     sources_title: str = "Sources",

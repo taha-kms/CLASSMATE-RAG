@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
 from rank_bm25 import BM25Okapi
 
@@ -208,7 +209,7 @@ _STOP_IT = {
 }
 
 
-def _choose_stopwords(lang_hint: Optional[str]) -> set[str]:
+def _choose_stopwords(lang_hint: str | None) -> set[str]:
     lang = (lang_hint or "").lower()
     if lang.startswith("it"):
         return _STOP_IT
@@ -218,7 +219,7 @@ def _choose_stopwords(lang_hint: Optional[str]) -> set[str]:
     return _STOP_EN
 
 
-def _tokenize(text: str, lang_hint: Optional[str] = None) -> List[str]:
+def _tokenize(text: str, lang_hint: str | None = None) -> list[str]:
     """
     Tokenize to unicode words, lowercase, remove stopwords.
     If lang_hint is None, caller may pass doc-level language; otherwise we may detect at insert time.
@@ -235,7 +236,7 @@ def _tokenize(text: str, lang_hint: Optional[str] = None) -> List[str]:
 _FILTER_SIMPLE_FIELDS = ["course", "unit", "language", "doc_type", "author", "semester"]
 
 
-def _matches_filter(meta: Mapping[str, Any], where: Optional[Mapping[str, Any]]) -> bool:
+def _matches_filter(meta: Mapping[str, Any], where: Mapping[str, Any] | None) -> bool:
     """
     Evaluate simple 'where' filters:
       - Equality on simple fields
@@ -285,8 +286,8 @@ def _matches_filter(meta: Mapping[str, Any], where: Optional[Mapping[str, Any]])
 class _Entry:
     id: str
     text: str
-    tokens: List[str]
-    metadata: Dict[str, Any]
+    tokens: list[str]
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -302,9 +303,9 @@ class BM25Store:
     index_dir: Path = field(default_factory=lambda: load_config().bm25_directory)
     index_file: str = "bm25_index.jsonl"
 
-    _entries: Dict[str, _Entry] = field(default_factory=dict)  # id -> entry
-    _id_list: List[str] = field(default_factory=list)  # order for BM25
-    _bm25: Optional[BM25Okapi] = None
+    _entries: dict[str, _Entry] = field(default_factory=dict)  # id -> entry
+    _id_list: list[str] = field(default_factory=list)  # order for BM25
+    _bm25: BM25Okapi | None = None
 
     # ---------- Core ops ----------
 
@@ -351,7 +352,7 @@ class BM25Store:
 
     # ---------- Query ----------
 
-    def search(self, *, query: str, where: Optional[Mapping[str, Any]] = None, top_k: int = 8) -> List[Dict[str, Any]]:
+    def search(self, *, query: str, where: Mapping[str, Any] | None = None, top_k: int = 8) -> list[dict[str, Any]]:
         """
         Run a BM25 search over the (optionally) filtered subset.
         Returns list of dicts with id, document, metadata, and score (higher is better).
@@ -377,7 +378,7 @@ class BM25Store:
         # Rank
         ranked = sorted(zip(candidate_ids, scores, strict=True), key=lambda x: x[1], reverse=True)[:top_k]
 
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for doc_id, score in ranked:
             e = self._entries[doc_id]
             out.append(
@@ -429,7 +430,7 @@ class BM25Store:
     # ---------- Convenience ----------
 
     @classmethod
-    def load_or_create(cls, index_dir: str | Path | None = None) -> "BM25Store":
+    def load_or_create(cls, index_dir: str | Path | None = None) -> BM25Store:
         # None means "use the configured directory", which resolves against
         # the project root rather than the current working directory.
         resolved = Path(index_dir) if index_dir is not None else load_config().bm25_directory

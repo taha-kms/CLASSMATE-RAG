@@ -13,8 +13,6 @@ text to translate directly and skip the citation contract.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from .types import Route
 
 _BASE_CITATION_RULES_EN = (
@@ -83,7 +81,7 @@ def _default_prompt(language: str) -> str:
     return f"{role}\n\n{_base_rules(language)}"
 
 
-def system_prompt_for(route: Route, *, language: Optional[str] = None) -> str:
+def system_prompt_for(route: Route, *, language: str | None = None) -> str:
     """
     Return the system prompt for `route`. `language` is "en" or "it"
     (anything else is treated as "en").

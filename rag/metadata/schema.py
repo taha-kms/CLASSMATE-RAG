@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
 
 
 class LanguageEnum(str, Enum):
@@ -36,7 +35,7 @@ class DocTypeEnum(str, Enum):
 
 
 # Keep stable for downstream filters
-METADATA_FIELDS: Tuple[str, ...] = (
+METADATA_FIELDS: tuple[str, ...] = (
     "course",
     "unit",
     "language",
@@ -54,20 +53,20 @@ METADATA_FIELDS: Tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class DocumentMetadata:
-    course: Optional[str] = None
-    unit: Optional[str] = None
+    course: str | None = None
+    unit: str | None = None
     language: LanguageEnum = LanguageEnum.auto
     doc_type: DocTypeEnum = DocTypeEnum.other
-    author: Optional[str] = None
-    semester: Optional[str] = None
-    tags: Optional[List[str]] = None
-    source_path: Optional[str] = None
-    created_at: Optional[str] = None
+    author: str | None = None
+    semester: str | None = None
+    tags: list[str] | None = None
+    source_path: str | None = None
+    created_at: str | None = None
     # Routing subject ("math" | "code" | "translation" | "default" | None).
     # None lets the ingest pipeline auto-classify.
-    subject: Optional[str] = None
+    subject: str | None = None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         d = asdict(self)
         if d.get("tags") is None:
             d.pop("tags", None)
@@ -84,20 +83,20 @@ class DocumentMetadata:
 
 @dataclass(frozen=True)
 class ChunkMetadata:
-    course: Optional[str] = None
-    unit: Optional[str] = None
+    course: str | None = None
+    unit: str | None = None
     language: LanguageEnum = LanguageEnum.auto
     doc_type: DocTypeEnum = DocTypeEnum.other
-    author: Optional[str] = None
-    semester: Optional[str] = None
-    tags: Optional[List[str]] = None
-    source_path: Optional[str] = None
-    page: Optional[int] = None
-    chunk_id: Optional[int] = None
-    created_at: Optional[str] = None
-    subject: Optional[str] = None
+    author: str | None = None
+    semester: str | None = None
+    tags: list[str] | None = None
+    source_path: str | None = None
+    page: int | None = None
+    chunk_id: int | None = None
+    created_at: str | None = None
+    subject: str | None = None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         d = asdict(self)
         if d.get("tags") is None:
             d.pop("tags", None)
@@ -113,14 +112,14 @@ class ChunkMetadata:
 # --- Normalization helpers ---
 
 
-def _clean_str(v: Optional[str]) -> Optional[str]:
+def _clean_str(v: str | None) -> str | None:
     if v is None:
         return None
     v2 = v.strip()
     return v2 or None
 
 
-def _parse_tags(v: Optional[str | List[str]]) -> Optional[List[str]]:
+def _parse_tags(v: str | list[str] | None) -> list[str] | None:
     if v is None:
         return None
     if isinstance(v, list):
@@ -131,7 +130,7 @@ def _parse_tags(v: Optional[str | List[str]]) -> Optional[List[str]]:
     return tags or None
 
 
-def _normalize_language(v: Optional[str]) -> LanguageEnum:
+def _normalize_language(v: str | None) -> LanguageEnum:
     if not v:
         return LanguageEnum.auto
     v = v.strip().lower()
@@ -144,7 +143,7 @@ def _normalize_language(v: Optional[str]) -> LanguageEnum:
     return LanguageEnum.auto
 
 
-def _normalize_doc_type(v: Optional[str]) -> DocTypeEnum:
+def _normalize_doc_type(v: str | None) -> DocTypeEnum:
     if not v:
         return DocTypeEnum.other
     v = v.strip().lower()
@@ -165,7 +164,7 @@ def _normalize_doc_type(v: Optional[str]) -> DocTypeEnum:
     return mapping.get(v, DocTypeEnum.other)
 
 
-def _normalize_subject(v: Optional[str]) -> Optional[str]:
+def _normalize_subject(v: str | None) -> str | None:
     """
     Normalize a routing subject string. Accepts the four canonical routes plus
     a few common aliases. Returns None if input is empty/unknown — caller can
@@ -197,14 +196,14 @@ def _normalize_subject(v: Optional[str]) -> Optional[str]:
 
 def normalize_cli_metadata(
     *,
-    course: Optional[str] = None,
-    unit: Optional[str] = None,
-    language: Optional[str] = None,
-    doc_type: Optional[str] = None,
-    author: Optional[str] = None,
-    semester: Optional[str] = None,
-    tags: Optional[str | List[str]] = None,
-    subject: Optional[str] = None,
+    course: str | None = None,
+    unit: str | None = None,
+    language: str | None = None,
+    doc_type: str | None = None,
+    author: str | None = None,
+    semester: str | None = None,
+    tags: str | list[str] | None = None,
+    subject: str | None = None,
 ) -> DocumentMetadata:
     """
     Normalize CLI-provided metadata for 'add' (ingest) or 'ask' (filters).

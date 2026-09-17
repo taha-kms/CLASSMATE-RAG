@@ -11,14 +11,13 @@ from __future__ import annotations
 import argparse
 import time
 from pathlib import Path
-from typing import List
 
 from rag.metadata import DocumentMetadata, normalize_cli_metadata
 from rag.pipeline import ingest_file
 
 
-def run(paths: List[str], repeat: int = 1, subject: str | None = None) -> None:
-    files: List[Path] = []
+def run(paths: list[str], repeat: int = 1, subject: str | None = None) -> None:
+    files: list[Path] = []
     for p in paths:
         if any(ch in p for ch in "*?[]"):
             files.extend(Path(".").glob(p))
