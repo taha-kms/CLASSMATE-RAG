@@ -1,0 +1,133 @@
+name: release
+
+on:
+  push:
+    tags: [ "v*" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # The tag is the single source of truth for the version. This refuses to
+  # publish when pyproject.toml disagrees, rather than shipping an image
+  # whose metadata contradicts its tag.
+  check-version:
+    name: Tag matches pyproject
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: v
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pyproject="$(python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")"
+          echo "tag=${tag} pyproject=${pyproject}"
+          if [ "${tag}" != "${pyproject}" ]; then
+            echo "::error::tag v${tag} does not match pyproject.toml version ${pyproject}"
+            exit 1
+          fi
+          echo "version=${tag}" >> "$GITHUB_OUTPUT"
+
+  image:
+    name: Publish image to GHCR
+    needs: check-version
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the published image
+        run: |
+          set -euo pipefail
+          ref="ghcr.io/${GITHUB_REPOSITORY,,}:${{ needs.check-version.outputs.version }}"
+          echo "testing ${ref}"
+          docker run --rm "${ref}" --help | head -3
+          uid="$(docker run --rm --entrypoint id "${ref}" -u)"
+          test "${uid}" != "0"
+
+  release:
+    name: Create the GitHub release
+    needs: [check-version, image]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Release notes
+        id: notes
+        run: |
+          set -euo pipefail
+          previous="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          {
+            echo "notes<<RELEASE_NOTES_EOF"
+            if [ -n "${previous}" ]; then
+              echo "### Changes since ${previous}"
+              echo
+              git log --no-merges --pretty='- %s' "${previous}..${GITHUB_REF_NAME}"
+            else
+              echo "### Changes"
+              echo
+              git log --no-merges --pretty='- %s'
+            fi
+            echo
+            echo "### Container image"
+            echo
+            echo '```'
+            echo "docker pull ghcr.io/${GITHUB_REPOSITORY,,}:${{ needs.check-version.outputs.version }}"
+            echo '```'
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.notes }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

@@ -184,3 +184,27 @@ which are deliberately left out to keep the image small.
 
 Running the whole stack, application and Chroma together, comes with the
 compose setup.
+
+## Releases
+
+Tagging a version builds the image, pushes it to GHCR and creates a GitHub
+release:
+
+```bash
+# bump the version in pyproject.toml first, then
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag is the source of truth. The workflow refuses to publish if
+`pyproject.toml` disagrees with it, so the two cannot drift apart
+silently.
+
+Published images:
+
+```bash
+docker pull ghcr.io/taha-kms/classmate-rag:0.2.0
+docker pull ghcr.io/taha-kms/classmate-rag:latest
+```
+
+A tag containing a hyphen, `v0.2.0-rc1`, is published as a pre-release.
