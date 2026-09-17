@@ -68,3 +68,19 @@ def test_generation_parameters_reach_the_model():
     assert (kwargs["max_tokens"], kwargs["temperature"]) == (128, 0.9)
     assert (kwargs["top_p"], kwargs["repeat_penalty"]) == (0.5, 1.2)
     assert kwargs["stop"] == ["</s>"]
+
+
+def test_a_missing_model_says_what_to_do_about_it(tmp_path):
+    with patch.object(llama_backend, "Llama", MagicMock()):
+        with pytest.raises(FileNotFoundError) as excinfo:
+            llama_backend.load_llama(tmp_path / "absent.gguf")
+
+    message = str(excinfo.value)
+    # The path alone is accurate and useless; this is the expected state on a
+    # fresh install, not a broken one.
+    assert "absent.gguf" in message
+    assert "LLM_REPO_ID" in message
+    assert "LLM_MODEL_PATH" in message
+    # Retrieval works without a model, and saying so stops people assuming
+    # nothing works until they have downloaded several gigabytes.
+    assert "without a model" in message

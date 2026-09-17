@@ -45,7 +45,24 @@ def load_llama(
 
     resolved = Path(model_path).expanduser().resolve()
     if not resolved.exists():
-        raise FileNotFoundError(f"Model file not found: {resolved}")
+        # The path alone is accurate and useless. No model ships with the
+        # image on purpose, so this is the expected first-run state rather
+        # than a broken install, and the message should say what to do.
+        raise FileNotFoundError(
+            f"No model at {resolved}.\n"
+            "\n"
+            "Nothing is bundled with the application: you choose the model and\n"
+            "supply it. To fetch one:\n"
+            "\n"
+            "  export LLM_REPO_ID=TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF\n"
+            "  export LLM_FILENAME=tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf\n"
+            "\n"
+            "and run the question again, or download a .gguf into ./models\n"
+            "yourself and point LLM_MODEL_PATH at it.\n"
+            "\n"
+            "Ingesting, previewing retrieval and the admin commands all work\n"
+            "without a model; only answering needs one."
+        )
 
     return Llama(
         model_path=str(resolved),
