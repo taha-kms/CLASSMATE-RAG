@@ -1,0 +1,54 @@
+name: frontend
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ "*" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: web
+
+jobs:
+  checks:
+    name: Typecheck, lint and format
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Type checking is most of the reason for choosing TypeScript, so it
+      # runs first and on its own rather than only as part of the build.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Checked, never rewritten, the same way ruff format is treated on the
+      # Python side.
+      - name: Format
+        run: npm run format:check
+
+      # Catches anything that type checks but will not bundle.
+      - name: Build
+        run: npm run build
