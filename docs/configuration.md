@@ -20,6 +20,7 @@ cp .env.example .env
 | --- | --- | --- |
 | `EMBEDDING_MODEL_NAME` | Sentence-Transformers model used for embeddings | `intfloat/multilingual-e5-base` |
 | `LLM_BACKEND` | Generation backend | `llama_cpp` |
+| `LLM_PROVIDER` | Which provider generates answers. `llama_cpp` runs locally | `llama_cpp` |
 | `MODEL_PROFILE` | Sized model set: `light`, `balanced`, `heavy` or `custom`. See below | `custom` |
 | `LLM_MODEL_PATH` | Local `.gguf` file used when routing is off | `./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf` |
 | `LLM_REPO_ID` | Hugging Face repo to download the model from if it is missing | unset |

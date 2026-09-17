@@ -51,6 +51,7 @@ from rag.utils.dedup import dedup_block_indices
 
 if TYPE_CHECKING:  # pragma: no cover - annotation only
     pass
+from rag.generation.backend import get_backend
 from rag.generation.post import cited_indices, enforce_citations
 from rag.generation.stream import (
     FinalEvent,
@@ -701,15 +702,15 @@ def ask_question_stream(
             {"role": "user", "content": user_msg},
         ]
 
-        loader = _get_model_loader()
+        backend = get_backend()
 
         yield StageEvent("loading_model")
         yield StageEvent("generating")
 
         pieces: list[str] = []
-        for piece in loader.chat_stream(
+        for piece in backend.chat_stream(
+            messages,
             route=decision.route,
-            messages=messages,
             max_tokens=int(cfg.route_max_tokens),
             temperature=float(cfg.route_temperature),
             top_p=float(cfg.route_top_p),
@@ -735,9 +736,9 @@ def ask_question_stream(
             yield ReplaceEvent("unknown_fallback")
 
             pieces = []
-            for piece in loader.chat_stream(
+            for piece in backend.chat_stream(
+                general_msgs,
                 route=decision.route,
-                messages=general_msgs,
                 max_tokens=int(cfg.route_max_tokens),
                 temperature=float(cfg.route_temperature),
                 top_p=float(cfg.route_top_p),
@@ -752,9 +753,9 @@ def ask_question_stream(
             answer = _translate_text(
                 answer,
                 target_lang,
-                chat=lambda msgs: loader.chat(
+                chat=lambda msgs: backend.chat(
+                    msgs,
                     route=decision.route,
-                    messages=msgs,
                     max_tokens=int(cfg.route_max_tokens),
                     temperature=0.0,
                     top_p=1.0,
@@ -800,16 +801,12 @@ def ask_question_stream(
         citations_required=True,
     )
 
-    # Run local LLM. Imported here rather than at module scope so the
-    # pipeline can be imported (and tested) without a compiled llama.cpp.
-    from rag.generation import LlamaCppRunner
-
     yield StageEvent("loading_model")
-    runner = LlamaCppRunner()
+    backend = get_backend()
 
     yield StageEvent("generating")
     pieces: list[str] = []
-    for piece in runner.chat_stream(messages):
+    for piece in backend.chat_stream(messages):
         pieces.append(piece)
         yield TokenEvent(piece)
     answer = "".join(pieces).strip()
@@ -820,7 +817,7 @@ def ask_question_stream(
         gm = build_general_messages(question)
         yield ReplaceEvent("unknown_fallback")
         pieces = []
-        for piece in runner.chat_stream(gm):
+        for piece in backend.chat_stream(gm):
             pieces.append(piece)
             yield TokenEvent(piece)
         answer = "".join(pieces).strip()
@@ -832,7 +829,7 @@ def ask_question_stream(
         answer = _translate_text(
             answer,
             target_lang,
-            chat=lambda msgs: runner.chat(msgs, temperature=0.0, top_p=1.0, repeat_penalty=1.0, max_tokens=2048),
+            chat=lambda msgs: backend.chat(msgs, temperature=0.0, top_p=1.0, max_tokens=2048),
         )
 
     # Strict citation enforcement (post-process). Skip when the answer came

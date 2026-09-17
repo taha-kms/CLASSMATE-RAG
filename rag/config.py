@@ -92,6 +92,10 @@ class Config:
 
     # Local LLM (llama.cpp by default)
     llm_backend: str = "llama_cpp"
+
+    # Which provider generates answers. llama_cpp runs locally; hosted
+    # providers register themselves under their own names.
+    llm_provider: str = "llama_cpp"
     llm_model_path: Path = Path("./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf")
 
     # Optional auto-download parameters (used if model file missing)
@@ -228,6 +232,7 @@ def load_config(reload: bool = False) -> Config:
         embedding_model_name=_getenv_str("EMBEDDING_MODEL_NAME", "intfloat/multilingual-e5-base")
         or "intfloat/multilingual-e5-base",
         llm_backend=_getenv_str("LLM_BACKEND", "llama_cpp") or "llama_cpp",
+        llm_provider=(_getenv_str("LLM_PROVIDER", "llama_cpp") or "llama_cpp").strip().lower(),
         llm_model_path=Path(
             _getenv_str("LLM_MODEL_PATH", "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf")
             or "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf"
