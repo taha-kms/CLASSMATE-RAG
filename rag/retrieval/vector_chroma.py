@@ -178,13 +178,11 @@ class ChromaVectorStore:
             raise ValueError("Lengths of ids, documents, metadatas, and embeddings must match.")
         col = self._ensure_collection()
 
-        # Delete existing IDs
+        # Replace any existing rows for these ids. A failure here would leave
+        # the collection holding both the old and the new copy, so it is not
+        # something to swallow.
         for i in range(0, len(ids), batch_size):
-            batch_ids = list(ids[i:i + batch_size])
-            try:
-                col.delete(ids=batch_ids)
-            except Exception:
-                pass
+            col.delete(ids=list(ids[i : i + batch_size]))
 
         # Add batches
         for i in range(0, len(ids), batch_size):
@@ -198,6 +196,24 @@ class ChromaVectorStore:
                 metadatas=batch_meta,
                 embeddings=batch_emb.astype("float32").tolist(),
             )
+
+    def delete(self, *, ids: Sequence[str], batch_size: int = 512) -> int:
+        """
+        Remove ids from the collection and report how many rows actually went.
+
+        Measured by counting before and after rather than returning len(ids):
+        ids that were not present remove nothing, and a caller that trusts the
+        request length cannot tell the difference. Exceptions propagate, so a
+        failed delete is a failure rather than a reassuring number.
+        """
+        if not ids:
+            return 0
+
+        col = self._ensure_collection()
+        before = col.count()
+        for i in range(0, len(ids), batch_size):
+            col.delete(ids=list(ids[i : i + batch_size]))
+        return max(0, before - col.count())
 
     # ---- Query ----
 
