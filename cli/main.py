@@ -321,6 +321,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
         "language": res.language,
         "top_k": res.top_k,
         "hybrid": res.hybrid,
+        "backend": res.backend,
         "grounded": res.grounded,
         "sources": [{"n": s.n, "ref": s.ref} for s in res.sources],
         "filters": res.filters_applied,

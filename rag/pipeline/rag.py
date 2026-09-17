@@ -108,6 +108,9 @@ class AskResult:
     retrieved: list[dict[str, object]]  # raw retrieved items (id, metadata, scores…)
     filters_applied: dict[str, object]
     hybrid: bool
+    # Which provider generated the answer. "Was that local or not" should
+    # never require reading the config (#99).
+    backend: str = "llama_cpp"
     # False when the answer cites nothing, so it came from the model rather
     # than from the ingested documents.
     grounded: bool = True
@@ -782,6 +785,7 @@ def ask_question_stream(
                 language=target_lang,
                 top_k=int(top_k),
                 sources=sources,
+                backend=backend.name,
                 grounded=grounded,
                 notice=notice,
                 retrieved=results,
@@ -852,6 +856,7 @@ def ask_question_stream(
             language=target_lang,
             top_k=int(top_k),
             sources=sources,
+            backend=backend.name,
             grounded=grounded,
             notice=notice,
             retrieved=results,

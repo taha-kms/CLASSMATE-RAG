@@ -383,3 +383,23 @@ credential.
 
 If a key does reach a file it should not, the gitleaks check in CI covers
 Anthropic, OpenAI, Hugging Face and Google shapes.
+
+## Hosted providers and your documents
+
+`LLM_PROVIDER` chooses what generates answers. `llama_cpp`, the default,
+runs on your machine and nothing leaves it.
+
+Any other provider runs on someone else's computers, and each question
+sends them:
+
+- the question
+- the passages retrieved from your documents to answer it
+
+Not the corpus, and not the documents those passages came from. But the
+passages are your coursework, and they do leave the machine. Queries are
+also billed per token by the provider.
+
+The first time a hosted provider is used in a session, the application
+prints what it is about to send, on stderr so it cannot end up in piped
+JSON. Every answer carries a `backend` field, so whether a given answer was
+local is never a question about configuration.

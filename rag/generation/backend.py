@@ -159,6 +159,27 @@ def available_backends() -> list[str]:
     return sorted(_BACKENDS)
 
 
+#: Providers already warned about in this process, so the notice appears
+#: once rather than before every question.
+_ANNOUNCED: set[str] = set()
+
+
+def _announce_if_hosted(name: str) -> None:
+    """Say what leaves the machine, the first time a hosted provider is used."""
+    import sys
+
+    from rag.generation.privacy import data_sent_notice
+
+    if name in _ANNOUNCED:
+        return
+    _ANNOUNCED.add(name)
+
+    notice = data_sent_notice(name)
+    if notice:
+        # stderr, so it never lands in the JSON on stdout.
+        print(f"\n{notice}\n", file=sys.stderr)
+
+
 def get_backend(name: str | None = None) -> ChatBackend:
     """
     The configured backend, or the one named.
@@ -170,4 +191,5 @@ def get_backend(name: str | None = None) -> ChatBackend:
     factory = _BACKENDS.get(name)
     if factory is None:
         raise ValueError(f"Unknown LLM_PROVIDER '{name}'. Available: {', '.join(available_backends())}.")
+    _announce_if_hosted(name)
     return factory()
