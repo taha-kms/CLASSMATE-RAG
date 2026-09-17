@@ -1,8 +1,10 @@
 """
 Sticky single-model loader.
 
-On 8 GB VRAM only one ~7B Q4 model fits at a time, so this loader keeps
-exactly one llama_cpp.Llama instance resident. When a query asks for a
+A 7B Q4_K_M GGUF is roughly 4.4 GB, so only one fits in memory at a time
+on the hardware this project targets, and on a 4 GB card not even one fits
+whole. This loader therefore keeps exactly one llama_cpp.Llama instance
+resident. When a query asks for a
 different route, the previous instance is freed and the new one is loaded.
 
 Model construction and completion unpacking are shared with

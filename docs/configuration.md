@@ -82,7 +82,8 @@ instead of your home directory.
 
 ### Subject routing
 
-Off by default. See the model size requirements before enabling it.
+Off by default, and the defaults are heavy. Read the next section before
+turning it on.
 
 | Variable | Description | Default |
 | --- | --- | --- |
@@ -267,3 +268,47 @@ So a one-off override works as you'd expect, without editing `.env`:
 LOG_LEVEL=DEBUG rag ask "..."
 CHROMA_HOST_PORT=8001 docker compose up -d chroma
 ```
+
+## What subject routing actually costs
+
+`ENABLE_ROUTING=true` swaps models per question subject. The defaults are
+four separate 7-8B models:
+
+| Route | Default model | Download |
+| --- | --- | --- |
+| math | DeepSeek-R1-Distill-Qwen-7B Q4_K_M | ~4.4 GB |
+| code | Qwen2.5-Coder-7B-Instruct Q4_K_M | ~4.4 GB |
+| translation | salamandraTA-7B-instruct Q4_K_M | ~4.4 GB |
+| default | Qwen3-8B Q4_K_M | ~4.9 GB |
+| | **total** | **~18 GB** |
+
+Nothing downloads them for you, and a missing one falls back to the default
+route rather than failing, so an unconfigured install quietly answers every
+question with the same model.
+
+### Memory
+
+Only one model is resident at a time. The loader evicts the current one
+before loading the next, which is the only way this fits on a normal
+machine, but it means a question that changes route pays a full model load
+first.
+
+Fully offloading a 7B Q4 to the GPU needs about 4.4 GB of VRAM on top of
+what the context window uses. So:
+
+| VRAM | What works |
+| --- | --- |
+| under 4 GB | CPU only. Leave `ROUTE_N_GPU_LAYERS` at `0` |
+| 4-6 GB | partial offload. Raise `ROUTE_N_GPU_LAYERS` gradually; `-1` will run out of memory |
+| 8 GB+ | one 7B Q4 fully offloaded, one at a time |
+
+`ROUTE_N_GPU_LAYERS=-1` means "all layers" and is the setting most likely
+to fail: it succeeds on a machine with headroom and dies partway through
+loading on one without.
+
+### Is it worth it
+
+Routing helps when the subjects are genuinely different and you have the
+disk and memory for several specialist models. On a laptop it usually is
+not worth 18 GB, and one good general model on the default route is the
+better trade. A hosted backend avoids the question entirely.
