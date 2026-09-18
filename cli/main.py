@@ -434,6 +434,20 @@ def cmd_model(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reconcile(args: argparse.Namespace) -> int:
+    """Report, and optionally remove, rows stranded in one store."""
+    from rag.admin.manage import reconcile_stores
+
+    try:
+        result = reconcile_stores(dry_run=not args.apply)
+    except Exception as e:
+        print(json.dumps({"action": "reconcile", "error": str(e)}), file=sys.stderr)
+        return 1
+
+    print(json.dumps({"action": "reconcile", **result}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_profiles(_args: argparse.Namespace) -> int:
     """
     Show the model profiles and which of them this machine can actually run.
@@ -850,6 +864,17 @@ def build_parser() -> argparse.ArgumentParser:
     pp.set_defaults(func=cmd_preview)
 
     # --- stats ---
+    pr = sub.add_parser(
+        "reconcile",
+        help="Find chunks stranded in one index but not the other",
+    )
+    pr.add_argument(
+        "--apply",
+        action="store_true",
+        help="Actually remove the stranded rows (default is to report only)",
+    )
+    pr.set_defaults(func=cmd_reconcile)
+
     pp = sub.add_parser(
         "profiles",
         help="Show model profiles and which fit this machine",

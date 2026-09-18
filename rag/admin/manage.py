@@ -181,6 +181,57 @@ def resolve_ids(
     return [e.id for e in cat if _matches_simple(e.metadata, where or {})]
 
 
+def find_orphans() -> dict[str, list[str]]:
+    """
+    Ids present in one store and not the other.
+
+    BM25 is the de facto catalog: every filtered command resolves ids by
+    reading it, so a vector row without a BM25 entry is invisible to `list`,
+    `show`, `delete` and `reingest` while still being returned by search.
+    The reverse, a BM25 entry with no vector, is not retrievable by vector
+    search but is still listed and deletable.
+    """
+    from rag.retrieval import BM25Store, ChromaVectorStore
+
+    bm = BM25Store.load_or_create()
+    vec = ChromaVectorStore.from_config()
+
+    bm25_ids = set(bm._entries)
+    vector_ids = set(vec.all_ids())
+
+    return {
+        "vector_only": sorted(vector_ids - bm25_ids),
+        "bm25_only": sorted(bm25_ids - vector_ids),
+    }
+
+
+def reconcile_stores(*, dry_run: bool = True) -> dict[str, object]:
+    """
+    Report, and optionally remove, rows stranded in one store.
+
+    Only vector-only rows are removed. BM25 holds the metadata catalog, so a
+    BM25 entry without a vector can be repaired by re-embedding, whereas a
+    vector row without metadata cannot be repaired at all and is
+    unreachable through every command that filters.
+    """
+    orphans = find_orphans()
+    removed = 0
+
+    if not dry_run and orphans["vector_only"]:
+        from rag.retrieval import ChromaVectorStore
+
+        removed = ChromaVectorStore.from_config().delete(ids=orphans["vector_only"])
+
+    return {
+        "vector_only": len(orphans["vector_only"]),
+        "bm25_only": len(orphans["bm25_only"]),
+        "removed": removed,
+        "dry_run": dry_run,
+        # Listed so a reader can check a few by hand before committing.
+        "sample": orphans["vector_only"][:10],
+    }
+
+
 def delete_by_ids(ids: Sequence[str]) -> tuple[int, int]:
     """
     Delete given chunk IDs from both vector and BM25 stores.
