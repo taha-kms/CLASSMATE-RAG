@@ -44,11 +44,14 @@ target-version = "py310"
 exclude = [".venv", "indexes", "models", "data"]
 
 [tool.ruff.lint]
-# BLE001 (blind except) and S110 (try-except-pass) are deliberately absent:
-# they are not mechanical. Each one is a judgement call about whether the
-# handler is hiding a real failure, and #41 and #100 were both cases where
-# it was. Tracked separately rather than bulk-silenced.
-select = ["E", "F", "I", "B", "C4", "UP"]
+# BLE001, S110 and S112 catch the shape behind #41 and #100: a handler that
+# turns a missing method into a plausible-looking value. Every site was read
+# and narrowed individually rather than bulk-silenced, so these go on with no
+# per-file ignores. The handful that stay broad are the ones whose failure
+# modes are genuinely open ended -- third-party parsers on hostile input, and
+# the CLI boundary that has to turn anything into an exit code. Those carry an
+# inline `# noqa: BLE001` with the reason, and all of them log.
+select = ["E", "F", "I", "B", "C4", "UP", "BLE001", "S110", "S112"]
 
 [tool.ruff.lint.per-file-ignores]
 # The project .env has to be read before transformers is imported, so the

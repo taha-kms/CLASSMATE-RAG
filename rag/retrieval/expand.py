@@ -14,12 +14,15 @@ Inputs/Outputs use the common retrieval dict shape:
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from rag.config import load_config
 from rag.utils import stable_chunk_id
+
+log = logging.getLogger(__name__)
 
 _BM25_JSONL = load_config().bm25_directory / "bm25_index.jsonl"
 
@@ -50,14 +53,15 @@ def _load_bm25_catalog() -> dict[str, tuple[str, dict[str, object]]]:
                 continue
             try:
                 obj = json.loads(line)
-                cid = str(obj.get("id") or "")
-                if not cid:
-                    continue
-                txt = str(obj.get("text") or "")
-                meta = obj.get("metadata") or {}
-                out[cid] = (txt, dict(meta))
-            except Exception:
+            except json.JSONDecodeError:
+                log.warning("Skipping unparseable catalog line: %.80s", line)
                 continue
+            cid = str(obj.get("id") or "")
+            if not cid:
+                continue
+            txt = str(obj.get("text") or "")
+            meta = obj.get("metadata") or {}
+            out[cid] = (txt, dict(meta))
     return out
 
 
@@ -74,7 +78,9 @@ def _neighbor_ids(meta: dict[str, object], *, radius: int) -> list[str]:
     try:
         base_page = int(page)
         base_cid = int(cid)
-    except Exception:
+    except (TypeError, ValueError):
+        # Metadata that is not numeric means we cannot name neighbours; that is
+        # a missing-feature case, not an error.
         return []
 
     course = meta.get("course") or None

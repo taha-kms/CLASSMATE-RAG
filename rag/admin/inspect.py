@@ -17,6 +17,7 @@ from rag.embeddings import E5MultilingualEmbedder
 from rag.generation import format_context_blocks
 from rag.retrieval import BM25Store, ChromaVectorStore
 from rag.retrieval.fusion import HybridRetriever
+from rag.retrieval.vector_chroma import VectorStoreUnavailable
 
 # ------------------------------
 # Helpers
@@ -34,8 +35,10 @@ def _du_bytes(path: Path) -> int:
         for f in files:
             try:
                 total += (Path(root) / f).stat().st_size
-            except Exception:
-                pass
+            except OSError:
+                # Vanished or unreadable between the walk and the stat. Disk
+                # usage is advisory, so skipping the file is right.
+                continue
     return total
 
 
@@ -120,8 +123,11 @@ def index_stats() -> dict[str, object]:
     chroma_count = 0
     try:
         chroma_count = vec.count()
-    except Exception:
-        chroma_count = -1  # unknown / error
+    except VectorStoreUnavailable:
+        # Only a database we cannot reach reports -1. A TypeError or a missing
+        # method is a bug in this code and must not be dressed up as a
+        # documented status value -- that is exactly how #41 stayed hidden.
+        chroma_count = -1
 
     chroma_dir = cfg.chroma_persist_directory
     bm25_dir = cfg.bm25_directory

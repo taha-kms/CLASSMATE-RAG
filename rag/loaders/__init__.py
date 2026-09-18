@@ -19,7 +19,10 @@ Notes
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 # html_readable pulls in bs4/readability-lxml and epub_loader pulls in
 # ebooklib. They are imported inside load_document_by_type() so that
@@ -29,18 +32,22 @@ from pathlib import Path
 # Optional deps for document types
 try:
     import pypdf  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     pypdf = None  # type: ignore
 
 try:
     import docx  # python-docx  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     docx = None  # type: ignore
 
 try:
     import pptx  # python-pptx  # type: ignore
-except Exception:  # pragma: no cover
+    from pptx.exc import PythonPptxError  # type: ignore
+except ImportError:  # pragma: no cover
     pptx = None  # type: ignore
+
+    class PythonPptxError(Exception):  # type: ignore[no-redef]
+        """Placeholder so the except clauses below still resolve."""
 
 
 # -----------------------
@@ -95,7 +102,8 @@ def _load_pdf(path: Path) -> list[tuple[int, str]]:
     for i, page in enumerate(reader.pages, start=1):  # type: ignore
         try:
             text = page.extract_text() or ""
-        except Exception:
+        except Exception:  # noqa: BLE001 - corrupt PDFs raise almost anything
+            log.warning("Could not extract text from page %d of %s", i, path, exc_info=True)
             text = ""
         text = text.strip()
         if text:
@@ -126,7 +134,8 @@ def _load_pptx(path: Path) -> list[tuple[int, str]]:
                     t = (shape.text or "").strip()
                     if t:
                         chunks.append(t)
-            except Exception:
+            except (AttributeError, KeyError, PythonPptxError):
+                log.debug("Unreadable shape on slide %d, skipping", i, exc_info=True)
                 continue
         txt = "\n".join(chunks).strip()
         if txt:

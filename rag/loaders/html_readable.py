@@ -12,10 +12,13 @@ Dependencies:
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from bs4 import BeautifulSoup
 from readability import Document  # type: ignore
+
+log = logging.getLogger(__name__)
 
 
 def _read_file(path: Path) -> str:
@@ -42,7 +45,11 @@ def load_html_readable(path: str | Path) -> list[tuple[int, str]]:
         main_html = doc.summary(html_partial=True)  # type: ignore
         soup = BeautifulSoup(main_html, "lxml")
         text = soup.get_text(separator="\n")
-    except Exception:
+    except Exception:  # noqa: BLE001 - readability/lxml on arbitrary HTML
+        # Real-world HTML breaks these parsers in open-ended ways, and the
+        # whole point of _fallback_bs is to cope. Log so a systematic failure
+        # is visible rather than silently degrading every page.
+        log.debug("readability extraction failed, using the plain fallback", exc_info=True)
         text = _fallback_bs(html)
 
     text = (text or "").strip()

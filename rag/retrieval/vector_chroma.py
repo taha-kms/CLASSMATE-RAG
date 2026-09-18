@@ -10,6 +10,7 @@ We always supply embeddings explicitly (from E5).
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -19,6 +20,18 @@ from typing import Any
 import numpy as np
 
 from rag.config import load_config
+
+log = logging.getLogger(__name__)
+
+
+class VectorStoreUnavailable(RuntimeError):
+    """The vector store could not be reached.
+
+    chromadb reports an unreachable server as a plain ValueError, which is
+    indistinguishable from a bug in our own call. Callers that want to degrade
+    gracefully when the database is down need to catch *that* and nothing else,
+    so the boundary is translated here once.
+    """
 
 
 def _slug_tag(t: str) -> str:
@@ -113,35 +126,33 @@ class ChromaVectorStore:
             # HTTP thin client
             self._mode_http = True
             host, port = "localhost", 8000
-            try:
-                from urllib.parse import urlparse
+            from urllib.parse import urlparse
 
+            try:
                 parsed = urlparse(http_url)
-                if parsed.hostname:
-                    host = parsed.hostname
-                if parsed.port:
-                    port = parsed.port
-            except Exception:
-                pass
+            except ValueError:
+                # A malformed CHROMA_HTTP_URL is worth saying out loud rather
+                # than silently falling back to localhost:8000, which then
+                # fails somewhere less obvious.
+                raise VectorStoreUnavailable(f"CHROMA_HTTP_URL is not a usable URL: {http_url!r}") from None
+            if parsed.hostname:
+                host = parsed.hostname
+            if parsed.port:
+                port = parsed.port
             host = self._normalize_host(host)
             from chromadb.config import Settings
 
-            def make_http_client(impl: str):
-                settings = Settings(
-                    chroma_api_impl=impl,
-                    chroma_server_host=host,
-                    chroma_server_http_port=port,
-                    anonymized_telemetry=False,
-                )
-                try:
-                    return chromadb.HttpClient(host=host, port=port, settings=settings)
-                except TypeError:
-                    return chromadb.HttpClient(settings=settings)
-
             try:
-                self._client = make_http_client("chromadb.api.fastapi.FastAPI")
-            except Exception:
-                self._client = make_http_client("rest")
+                self._client = chromadb.HttpClient(
+                    host=host,
+                    port=port,
+                    settings=Settings(anonymized_telemetry=False),
+                )
+            except ValueError as e:
+                # chromadb reports an unreachable server as a bare ValueError.
+                # Translate it so callers can tell "database is down" from
+                # "we called this wrong"; everything else propagates.
+                raise VectorStoreUnavailable(f"Could not reach the Chroma server at {host}:{port} ({e})") from e
             return self._client
 
         # Local persistent client
@@ -294,18 +305,22 @@ class ChromaVectorStore:
         return out
 
     def count(self) -> int:
-        col = self._ensure_collection()
-        try:
-            return col.count()
-        except Exception:
-            return 0
+        # Deliberately not guarded. A swallowed failure here returns 0, which
+        # reads as "the corpus is empty" -- the most plausible wrong answer
+        # available, and the shape of #100. Callers that want to degrade decide
+        # that for themselves.
+        return self._ensure_collection().count()
 
     def reset_collection(self) -> None:
         client = self._ensure_client()
+        # Imported here, not at module scope: chromadb is loaded lazily so that
+        # importing rag.retrieval does not drag it in (see test_lazy_imports).
+        from chromadb.errors import NotFoundError
+
         try:
             client.delete_collection(self.collection_name)
-        except Exception:
-            pass
+        except NotFoundError:
+            pass  # already absent, which is the state we wanted
         self._collection = None
         self._ensure_collection()
 

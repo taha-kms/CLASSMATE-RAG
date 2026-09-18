@@ -8,11 +8,14 @@ PDF loader.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from pypdf import PdfReader
 
 from rag.utils.text import normalize_text
+
+log = logging.getLogger(__name__)
 
 
 def _ocr_page_images_to_text(pdf_path: Path, page_index_zero: int, ocr_lang: str = "eng+ita") -> str:
@@ -24,7 +27,8 @@ def _ocr_page_images_to_text(pdf_path: Path, page_index_zero: int, ocr_lang: str
     try:
         import pytesseract
         from pdf2image import convert_from_path
-    except Exception:
+    except ImportError:
+        log.debug("OCR extras not installed; skipping OCR for this page")
         return ""
 
     try:
@@ -35,7 +39,11 @@ def _ocr_page_images_to_text(pdf_path: Path, page_index_zero: int, ocr_lang: str
             txt = pytesseract.image_to_string(img, lang=ocr_lang)
             texts.append(txt or "")
         return normalize_text("\n".join(texts))
-    except Exception:
+    except Exception:  # noqa: BLE001 - poppler/tesseract are external binaries
+        # OCR reaches outside Python entirely, so the failure modes are open
+        # ended: a missing binary, an unsupported language pack, a page that
+        # renders to nothing. OCR is already best-effort, so log and move on.
+        log.warning("OCR failed for page %d of %s", page_index_zero + 1, pdf_path, exc_info=True)
         return ""
 
 
@@ -50,7 +58,11 @@ def load_pdf_pages(path: str | Path, enable_ocr: bool = False, ocr_lang: str = "
     for i, page in enumerate(reader.pages):
         try:
             txt = page.extract_text() or ""
-        except Exception:
+        except Exception:  # noqa: BLE001 - corrupt PDFs raise almost anything
+            # Narrowing this to PyPdfError would regress robustness: damaged
+            # PDFs surface as KeyError, TypeError and friends from deep inside
+            # the object graph. One unreadable page should not cost the file.
+            log.warning("Could not extract text from page %d of %s", i + 1, p, exc_info=True)
             txt = ""
         txt = normalize_text(txt)
         if enable_ocr and not txt:

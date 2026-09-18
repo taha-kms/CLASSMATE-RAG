@@ -10,12 +10,15 @@ Features:
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Iterable
 from pathlib import Path
 
 import numpy as np
 
 from rag.config import load_config
+
+log = logging.getLogger(__name__)
 
 # ------------------------------
 # Helpers
@@ -101,10 +104,13 @@ class CachingEmbedder:
             if fp.exists():
                 try:
                     vec = np.load(fp)
+                except (OSError, ValueError, EOFError):
+                    # Truncated or corrupt cache entry. Recomputing is always
+                    # correct here, so this stays a miss.
+                    log.debug("Discarding unreadable cache entry %s", fp, exc_info=True)
+                else:
                     cached.append(vec.astype("float32", copy=False))
                     continue
-                except Exception:
-                    pass  # corrupted file → treat as miss
             cached.append(None)
             miss_idx.append(i)
             miss_texts.append(t)
@@ -138,8 +144,11 @@ class CachingEmbedder:
                 try:
                     fp.parent.mkdir(parents=True, exist_ok=True)
                     np.save(fp, miss_vecs[j])
-                except Exception:
-                    pass
+                except OSError:
+                    # A cache that cannot be written (full disk, read-only
+                    # mount) must not fail the encode; the vectors are already
+                    # computed and returned either way.
+                    log.debug("Could not write cache entry %s", fp, exc_info=True)
         else:
             miss_vecs = np.zeros((0, 0), dtype="float32")
 
@@ -156,8 +165,11 @@ class CachingEmbedder:
                 try:
                     fp.parent.mkdir(parents=True, exist_ok=True)
                     np.save(fp, miss_vecs[j])
-                except Exception:
-                    pass
+                except OSError:
+                    # A cache that cannot be written (full disk, read-only
+                    # mount) must not fail the encode; the vectors are already
+                    # computed and returned either way.
+                    log.debug("Could not write cache entry %s", fp, exc_info=True)
         else:
             miss_vecs = np.zeros((0, 0), dtype="float32")
 
