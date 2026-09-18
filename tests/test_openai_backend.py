@@ -108,9 +108,7 @@ def _chunk(content):
 def test_streaming_yields_the_pieces():
     backend = OpenAIBackend(api_key="k")
     client = MagicMock()
-    client.chat.completions.create.return_value = iter(
-        [_chunk("The "), _chunk("chain "), _chunk("rule.")]
-    )
+    client.chat.completions.create.return_value = iter([_chunk("The "), _chunk("chain "), _chunk("rule.")])
     with patch.object(backend, "_client", return_value=client):
         assert list(backend.chat_stream([])) == ["The ", "chain ", "rule."]
 

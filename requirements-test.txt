@@ -14,4 +14,10 @@ python-dotenv>=1.0,<2
 langdetect>=1.0.9,<1.1
 
 # Lint and format, run in CI alongside the tests.
-ruff>=0.13,<1
+#
+# Pinned exactly. The formatter changes between patch releases: 0.16.7 and
+# 0.16.8 disagreed about one line, so `ruff format --check` passed locally
+# and failed in CI purely on version. Dependabot bumps this, and the bump
+# carries whatever reformatting comes with it, which is where that diff
+# belongs.
+ruff==0.16.8
