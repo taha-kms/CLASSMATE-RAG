@@ -1,21 +1,38 @@
 services:
   chroma:
-    image: chromadb/chroma:0.6.3
+    # Must match the chromadb pin in requirements.txt. 1.x also moved the data
+    # directory: the server reads /config.yaml, which sets persist_path: /data,
+    # and ignores the IS_PERSISTENT / PERSIST_DIRECTORY variables 0.6 used. Set
+    # those and the server quietly stores nothing where you expect it.
+    image: chromadb/chroma:1.5.9
     container_name: classmate-chroma
     ports:
       # Host bind is configurable so the stack still comes up when something
       # else already holds 8000. Loopback by default: there is no auth in
       # front of Chroma and this is meant to run on one machine.
       - "${CHROMA_BIND_HOST:-127.0.0.1}:${CHROMA_HOST_PORT:-8000}:8000"
-    environment:
-      - IS_PERSISTENT=TRUE
-      - PERSIST_DIRECTORY=/chroma/chroma
-      - ANONYMIZED_TELEMETRY=FALSE
     volumes:
-      - ./indexes/chroma:/chroma/chroma
+      # 1.x opens a directory written by 0.6 in place, so upgrading needs no
+      # dump and restore. Back the directory up first anyway: the server
+      # rewrites the SQLite file on first open.
+      - ./indexes/chroma:/data
+    # No `environment:` block on purpose. The persist path comes from
+    # /config.yaml, and the server reports "No telemetry is configured" by
+    # default; the Python client turns telemetry off itself in
+    # rag/retrieval/vector_chroma.py.
     healthcheck:
-      # curl is present in the image; wget and nc are not.
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v2/heartbeat"]
+      # The image carries no curl, wget or nc, and /bin/sh is dash, so the
+      # usual one-liners all fail. bash is present and /dev/tcp is a bash
+      # builtin, which is enough to speak HTTP by hand.
+      #
+      # Grepping for "200 OK" rather than just opening the socket is the point:
+      # the port accepts connections for a moment before the routes are
+      # mounted, and a bare TCP probe calls that half-started server healthy.
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/localhost/8000 && printf "GET /api/v2/heartbeat HTTP/1.0\r\n\r\n" >&3 && grep -q "200 OK" <&3'
       interval: 5s
       timeout: 3s
       retries: 12
