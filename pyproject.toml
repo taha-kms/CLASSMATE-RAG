@@ -37,6 +37,9 @@ optional-dependencies.dev = { file = ["requirements-test.txt"] }
 optional-dependencies.anthropic = { file = ["requirements-anthropic.txt"] }
 optional-dependencies.openai = { file = ["requirements-openai.txt"] }
 optional-dependencies.gemini = { file = ["requirements-gemini.txt"] }
+# The local HTTP API, same reason: someone using only the CLI should not
+# have to install a web server.
+optional-dependencies.api = { file = ["requirements-api.txt"] }
 
 [tool.ruff]
 line-length = 120

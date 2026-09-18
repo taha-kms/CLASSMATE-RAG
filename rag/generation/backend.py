@@ -20,6 +20,7 @@ pipeline's.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -74,13 +75,26 @@ class LlamaCppBackend:
 
     name = "llama_cpp"
 
+    #: The unrouted runner, built once for the process.
+    #:
+    #: It used to be built per call, which was harmless while the only caller
+    #: was a CLI that asks one question and exits. The API asks concurrently,
+    #: and LlamaCppRunner.__init__ calls load_llama eagerly, so every request
+    #: was loading its own copy of the GGUF -- hundreds of megabytes each,
+    #: several at a time. Callers still only load a model by asking a
+    #: question; they just stop re-loading it.
+    _shared_runner = None
+    _runner_lock = threading.Lock()
+
     def _runner(self):
         from rag.generation import LlamaCppRunner
 
-        # Built per call rather than cached: the non-routed path constructs
-        # it once per question today, and caching it here would change when
-        # a model is loaded without anyone asking for that.
-        return LlamaCppRunner()
+        # Callers hold the generation lock by the time they get here, so this
+        # second lock only guards against a non-generating caller racing in.
+        with LlamaCppBackend._runner_lock:
+            if LlamaCppBackend._shared_runner is None:
+                LlamaCppBackend._shared_runner = LlamaCppRunner()
+            return LlamaCppBackend._shared_runner
 
     def _loader(self):
         from rag.pipeline.rag import _get_model_loader
@@ -106,13 +120,19 @@ class LlamaCppBackend:
                 top_p=top_p,
                 stop=stop,
             )
-        return self._runner().chat(
-            messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            stop=stop,
-        )
+        # Same single-generation guarantee as chat_stream below. Simpler here
+        # because there is no generator to hand back: the whole call runs
+        # inside the lock.
+        from rag.routing.loader import generation_lock
+
+        with generation_lock():
+            return self._runner().chat(
+                messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop,
+            )
 
     def chat_stream(
         self,
@@ -133,13 +153,40 @@ class LlamaCppBackend:
                 top_p=top_p,
                 stop=stop,
             )
-        return self._runner().chat_stream(
-            messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            stop=stop,
-        )
+
+        # The unrouted path takes the same lock the sticky loader does, and for
+        # the same reason: one generation at a time, one model resident. It was
+        # missing here, and since ENABLE_ROUTING defaults to false this is the
+        # path almost everyone runs -- so concurrent callers were generating
+        # simultaneously, each against its own freshly loaded model.
+        #
+        # Acquired before the generator is returned, exactly as the loader
+        # does: a generator body does not run until the first next(), so
+        # locking inside would let two callers hold un-started generators and
+        # then both load a model.
+        from rag.routing.loader import generation_lock
+
+        lock = generation_lock()
+        lock.acquire()
+        try:
+            stream = self._runner().chat_stream(
+                messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                stop=stop,
+            )
+        except BaseException:
+            lock.release()
+            raise
+
+        def _guarded() -> Iterator[str]:
+            try:
+                yield from stream
+            finally:
+                lock.release()
+
+        return _guarded()
 
 
 #: provider name -> a callable returning a backend. Providers register here

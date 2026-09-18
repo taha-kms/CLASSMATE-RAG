@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from rag.config import load_config
-from rag.embeddings import E5MultilingualEmbedder
+from rag.embeddings import shared_embedder
 from rag.generation import format_context_blocks
 from rag.retrieval import BM25Store, ChromaVectorStore
 from rag.retrieval.fusion import HybridRetriever
@@ -65,7 +65,7 @@ def retrieve_preview(
     cfg = load_config()
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create()
-    embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
+    embedder = shared_embedder(model_name=cfg.embedding_model_name)
 
     retriever = HybridRetriever(
         vector_store=vec_store,

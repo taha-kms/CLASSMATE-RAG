@@ -45,3 +45,39 @@ def test_a_missing_or_broken_dotenv_does_not_crash_the_cli(monkeypatch):
 
     monkeypatch.setattr("dotenv.load_dotenv", boom)
     cli_main._load_project_env()  # must swallow it
+
+
+def test_a_broken_dotenv_at_import_time_warns_instead_of_crashing():
+    """The bootstrap has to survive *during import*, not only when called.
+
+    The test above calls _load_project_env() on an already-imported module,
+    where every module-level name is bound. That is not the situation the
+    handler runs in: the call happens at the top of cli/main.py, before the
+    rest of its imports. A warning that referenced `sys` therefore raised
+    NameError at the only moment it could ever fire, and no test could see it,
+    because by the time a test could call the function `sys` was bound.
+
+    Hence a subprocess: it exercises the real import.
+    """
+    import subprocess
+    import sys
+
+    code = (
+        "import dotenv\n"
+        "def boom(*a, **k):\n"
+        "    raise RuntimeError('broken .env')\n"
+        "dotenv.load_dotenv = boom\n"
+        "import cli.main\n"
+        "print('imported')\n"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+    )
+
+    assert proc.returncode == 0, f"importing the CLI crashed:\n{proc.stderr}"
+    assert "imported" in proc.stdout
+    assert "broken .env" in proc.stderr, f"the failure was swallowed entirely:\n{proc.stderr}"
+    assert "NameError" not in proc.stderr

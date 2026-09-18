@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from rag.config import load_config
-from rag.embeddings import E5MultilingualEmbedder
+from rag.embeddings import shared_embedder
 from rag.embeddings.cache import CachingEmbedder
 from rag.retrieval import BM25Store, ChromaVectorStore
 from rag.retrieval.vector_chroma import VectorStoreUnavailable
@@ -95,7 +95,7 @@ def dump_index(
     """
     cfg = load_config()
     model_name = str(cfg.embedding_model_name)
-    embedder = E5MultilingualEmbedder(model_name=model_name)
+    embedder = shared_embedder(model_name=model_name)
 
     entries = list(_iter_bm25_catalog())
     if not entries:
@@ -149,7 +149,7 @@ def restore_dump(
         raise FileNotFoundError(f"Dump not found: {p}")
 
     cfg = load_config()
-    base_embedder = E5MultilingualEmbedder(model_name=str(cfg.embedding_model_name))
+    base_embedder = shared_embedder(model_name=str(cfg.embedding_model_name))
     embedder = CachingEmbedder(base_embedder)
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create()
@@ -235,7 +235,7 @@ def rebuild_embeddings(
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create()
 
-    base_embedder = E5MultilingualEmbedder(model_name=new_model_name)
+    base_embedder = shared_embedder(model_name=new_model_name)
     embedder = CachingEmbedder(base_embedder)
 
     updated = 0
