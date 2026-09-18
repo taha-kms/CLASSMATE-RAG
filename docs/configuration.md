@@ -23,6 +23,9 @@ cp .env.example .env
 | `LLM_PROVIDER` | Which provider generates answers. `llama_cpp` runs locally | `llama_cpp` |
 | `ANTHROPIC_API_KEY` | Key for `LLM_PROVIDER=anthropic`. Prefer `rag config set` | unset |
 | `ANTHROPIC_MODEL` | Model for that provider | `claude-opus-5` |
+| `OPENAI_API_KEY` | Key for `LLM_PROVIDER=openai`. Prefer `rag config set` | unset |
+| `OPENAI_MODEL` | Model for that provider | `gpt-4o-mini` |
+| `OPENAI_BASE_URL` | Point the OpenAI adapter at another server speaking the same protocol | unset |
 | `MODEL_PROFILE` | Sized model set: `light`, `balanced`, `heavy` or `custom`. See below | `custom` |
 | `LLM_MODEL_PATH` | Local `.gguf` file used when routing is off | `./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf` |
 | `LLM_REPO_ID` | Hugging Face repo to download the model from if it is missing | unset |
@@ -424,3 +427,28 @@ coursework to Anthropic and is billed per token.
 `ANTHROPIC_MODEL` picks the model. Subject routing has no effect here:
 routes exist to swap local GGUFs, and a hosted provider has one model per
 request instead.
+
+## Using OpenAI, or anything that speaks its protocol
+
+```bash
+pip install -e ".[openai]"
+rag config set OPENAI_API_KEY sk-...
+LLM_PROVIDER=openai rag ask "What is the chain rule?" --course Maths
+```
+
+`OPENAI_BASE_URL` is the useful part. Several servers expose the same API,
+so one adapter covers them:
+
+```bash
+# llama.cpp's own server
+LLM_PROVIDER=openai OPENAI_BASE_URL=http://localhost:8080/v1 rag ask "..."
+
+# Ollama
+LLM_PROVIDER=openai OPENAI_BASE_URL=http://localhost:11434/v1 rag ask "..."
+```
+
+With a base URL set, the key is optional: local servers ignore it, and the
+SDK is given a placeholder rather than making you invent one.
+
+Pointing this at a server on your own machine keeps everything local, so
+the privacy note about hosted providers does not apply to that case.

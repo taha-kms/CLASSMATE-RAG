@@ -11,4 +11,7 @@ from __future__ import annotations
 
 def register_all() -> None:
     """Make every bundled provider selectable."""
-    from . import anthropic_backend  # noqa: F401  (import registers it)
+    from . import (
+        anthropic_backend,  # noqa: F401  (import registers it)
+        openai_backend,  # noqa: F401
+    )

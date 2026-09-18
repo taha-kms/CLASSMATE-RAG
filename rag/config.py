@@ -101,6 +101,10 @@ class Config:
     # environment; models default per provider.
     anthropic_api_key: str | None = None
     anthropic_model: str | None = None
+    openai_api_key: str | None = None
+    openai_model: str | None = None
+    # Points the OpenAI adapter at anything speaking the same protocol.
+    openai_base_url: str | None = None
     llm_model_path: Path = Path("./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf")
 
     # Optional auto-download parameters (used if model file missing)
@@ -257,6 +261,9 @@ def load_config(reload: bool = False) -> Config:
         llm_provider=(_getenv_str("LLM_PROVIDER", "llama_cpp") or "llama_cpp").strip().lower(),
         anthropic_api_key=_read_secret_setting("ANTHROPIC_API_KEY"),
         anthropic_model=_getenv_str("ANTHROPIC_MODEL"),
+        openai_api_key=_read_secret_setting("OPENAI_API_KEY"),
+        openai_model=_getenv_str("OPENAI_MODEL"),
+        openai_base_url=_getenv_str("OPENAI_BASE_URL"),
         llm_model_path=Path(
             _getenv_str("LLM_MODEL_PATH", "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf")
             or "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf"
