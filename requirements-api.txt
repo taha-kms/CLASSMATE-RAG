@@ -1,0 +1,11 @@
+# Local HTTP API (rag serve). Optional: the CLI works without any of this.
+#
+# Install with:  pip install -e ".[api]"
+fastapi>=0.115,<1
+# [standard] pulls in uvloop and httptools. Plain uvicorn also works; the
+# extras only make it faster.
+uvicorn>=0.30,<1
+# Required by FastAPI to accept multipart form uploads, which is how POST
+# /ingest receives a file. FastAPI raises at request time without it, not at
+# import time, so leaving it out fails only when someone uploads something.
+python-multipart>=0.0.9,<0.1

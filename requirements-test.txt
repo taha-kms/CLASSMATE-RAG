@@ -21,3 +21,13 @@ langdetect>=1.0.9,<1.1
 # carries whatever reformatting comes with it, which is where that diff
 # belongs.
 ruff==0.16.8
+
+# The local API, so tests/test_api_*.py can build the app and drive it through
+# TestClient. Light on purpose: rag/api/app.py keeps every heavy import inside
+# a handler, so the routes, validation and SSE framing are all reachable
+# without chromadb or torch. httpx is what TestClient speaks; python-multipart
+# is what FastAPI needs to accept the upload in POST /ingest, and it fails at
+# request time rather than import time when missing.
+fastapi>=0.115,<1
+httpx>=0.27,<1
+python-multipart>=0.0.9,<0.1

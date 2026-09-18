@@ -15,6 +15,10 @@ This folder contains guides and references for installing, configuring, and usin
 - [configuration.md](configuration.md)  
   Environment variables, index settings, and explanation of admin commands.
 
+- [api.md](api.md)  
+  The local HTTP API behind `rag serve`: endpoints, the streaming event
+  contract, and why it binds to localhost.
+
 - [architecture.md](architecture.md) *(optional)*  
   Overview of system design: chunking → embeddings → retrieval → generation.
 

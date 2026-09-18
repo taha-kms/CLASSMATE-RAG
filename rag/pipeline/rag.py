@@ -406,9 +406,9 @@ def ingest_file(
     metas: list[dict[str, object]] = []
 
     # Components (embedder + caches + stores)
-    from rag.embeddings import E5MultilingualEmbedder
+    from rag.embeddings import shared_embedder
 
-    base_embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
+    base_embedder = shared_embedder(model_name=cfg.embedding_model_name)
     embedder = CachingEmbedder(base_embedder)
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create()
@@ -582,6 +582,29 @@ def _translate_text(text: str, target_lang: str, *, chat: Callable[[list[dict[st
     return chat(msgs).strip() or text
 
 
+def _waiting_if_busy() -> Iterator[StreamEvent]:
+    """Announce a queued generation instead of going quiet.
+
+    Only one generation runs at a time: StickyModelLoader holds a single lock
+    so two routes cannot race to swap the resident model. A second caller
+    therefore blocks here with nothing emitted, and over HTTP that is
+    indistinguishable from a hang.
+
+    The check sits immediately before generation rather than at the start of
+    the stream. Retrieval and embedding happen first and can take seconds, so
+    an earlier check reports the lock as free and says nothing -- which is what
+    the first version of this did.
+
+    Racy on purpose: if the lock frees between the check and the acquire, the
+    cost is one spurious event, which is far cheaper than the silence. Hosted
+    backends never take the lock, so this stays quiet for them.
+    """
+    from rag.routing.loader import generation_lock
+
+    if generation_lock().locked():
+        yield StageEvent("waiting")
+
+
 def ask_question(
     *,
     question: str,
@@ -637,9 +660,9 @@ def ask_question_stream(
     # Components
     vec_store = ChromaVectorStore.from_config()
     bm25_store = BM25Store.load_or_create()
-    from rag.embeddings import E5MultilingualEmbedder
+    from rag.embeddings import shared_embedder
 
-    base_embedder = E5MultilingualEmbedder(model_name=cfg.embedding_model_name)
+    base_embedder = shared_embedder(model_name=cfg.embedding_model_name)
     embedder = CachingEmbedder(base_embedder)
 
     retriever = HybridRetriever(
@@ -712,6 +735,7 @@ def ask_question_stream(
 
         backend = get_backend()
 
+        yield from _waiting_if_busy()
         yield StageEvent("loading_model")
         yield StageEvent("generating")
 
@@ -810,6 +834,7 @@ def ask_question_stream(
         citations_required=True,
     )
 
+    yield from _waiting_if_busy()
     yield StageEvent("loading_model")
     backend = get_backend()
 
