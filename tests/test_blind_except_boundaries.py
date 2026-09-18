@@ -12,7 +12,8 @@ to reach the caller.
 
 from __future__ import annotations
 
-import tomllib
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -99,21 +100,63 @@ class TestChunkingIsNotSilentlyLossy:
 
 
 class TestRulesStayOn:
-    """Re-enabling the rules is the point; a silent revert undoes the audit."""
+    """Re-enabling the rules is the point; a silent revert undoes the audit.
 
-    def test_the_three_rules_are_selected(self):
-        cfg = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-        selected = cfg["tool"]["ruff"]["lint"]["select"]
-        for rule in ("BLE001", "S110", "S112"):
-            assert rule in selected, f"{rule} was dropped from the ruff config"
+    Asserted by running ruff rather than by reading the select list out of
+    pyproject.toml. What matters is that a newly written blind except is
+    actually rejected, and that holds however the config expresses it -- a
+    dropped rule, a per-file-ignore or a stray `extend-exclude` all show up
+    here, and none of them show up in a config-text assertion.
+    """
 
-    def test_no_per_file_ignore_smuggles_them_back(self):
-        cfg = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-        ignores = cfg["tool"]["ruff"]["lint"].get("per-file-ignores", {})
-        for path, rules in ignores.items():
-            overlap = set(rules) & {"BLE001", "S110", "S112"}
-            assert not overlap, (
-                f"{path} ignores {sorted(overlap)}. The sites that legitimately "
-                f"stay broad carry an inline `# noqa` with a reason instead, so "
-                f"each one is justified where it sits."
-            )
+    @staticmethod
+    def _check_as(path: Path, source: str) -> str:
+        """Run ruff over `source` as though it were the file at `path`.
+
+        Invoked as `python -m ruff` rather than by looking for a `ruff` on
+        PATH: pytest is routinely run as `.venv/bin/python -m pytest` without
+        the venv activated, and a PATH lookup then skips these tests rather
+        than running them. A guard that quietly skips is no guard.
+        """
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "ruff",
+                "check",
+                "--no-cache",
+                "--output-format",
+                "concise",
+                "--stdin-filename",
+                str(path),
+                "-",
+            ],
+            input=source,
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+        )
+        return proc.stdout
+
+    @pytest.mark.parametrize(
+        "target",
+        [ROOT / "rag" / "_probe.py", ROOT / "cli" / "_probe.py"],
+        ids=["rag", "cli"],
+    )
+    def test_a_new_blind_except_is_rejected(self, target):
+        out = self._check_as(target, "try:\n    pass\nexcept Exception:\n    pass\n")
+        assert "BLE001" in out, f"blind except accepted under {target}:\n{out}"
+        assert "S110" in out, f"try-except-pass accepted under {target}:\n{out}"
+
+    def test_try_except_continue_is_rejected(self):
+        # Untyped on purpose: S112 only fires for bare/Exception handlers
+        # unless check-typed-exception is turned on, which it is not.
+        source = "for _ in []:\n    try:\n        pass\n    except Exception:\n        continue\n"
+        out = self._check_as(ROOT / "rag" / "_probe.py", source)
+        assert "S112" in out, f"try-except-continue accepted:\n{out}"
+
+    def test_an_inline_noqa_with_a_reason_is_still_the_escape_hatch(self):
+        """The four sites that stay broad rely on this working."""
+        source = "try:\n    pass\nexcept Exception:  # noqa: BLE001 - reason here\n    print('logged')\n"
+        out = self._check_as(ROOT / "rag" / "_probe.py", source)
+        assert "BLE001" not in out, f"inline noqa stopped working:\n{out}"
