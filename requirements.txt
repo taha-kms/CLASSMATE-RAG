@@ -37,7 +37,7 @@ pytesseract>=0.3.10
 langdetect>=1.0.9,<1.1
 
 # CLI / utilities
-tqdm>=4.66,<5
+tqdm>=4.70.1,<5
 pydantic>=2.7,<3
 
 # Model download + env loading
