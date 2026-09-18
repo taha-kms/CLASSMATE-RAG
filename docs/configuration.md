@@ -473,3 +473,31 @@ limit rather than a failure:
 Gemini rate limit reached. Wait a moment and ask again, or set
 LLM_PROVIDER=llama_cpp to generate locally.
 ```
+
+## When the two indexes disagree
+
+Every chunk should be in both the vector store and the lexical index. `rag
+stats` now says whether they match:
+
+```json
+{ "vector_count": 14, "bm25": { "count": 2 }, "consistent": false,
+  "warning": "The vector store holds 14 chunks and the lexical index holds 2..." }
+```
+
+To see what is stranded:
+
+```bash
+rag reconcile            # report only
+rag reconcile --apply    # remove the stranded vector rows
+```
+
+The two directions are not the same problem. The lexical index is the
+catalog: `list`, `show`, `delete` and `reingest` all resolve ids by reading
+it. So a vector row with no lexical entry is **invisible to every one of
+those commands while still being returned by search**, which is how deleted
+material kept reappearing before #100. Those are the rows `--apply`
+removes.
+
+A lexical entry with no vector is the reverse: not retrievable by vector
+search, but still listed and deletable, and repairable by re-embedding. It
+is reported and left alone.

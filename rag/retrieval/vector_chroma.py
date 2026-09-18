@@ -219,6 +219,27 @@ class ChromaVectorStore:
             col.delete(ids=list(ids[i : i + batch_size]))
         return max(0, before - col.count())
 
+    def all_ids(self, *, batch_size: int = 1000) -> list[str]:
+        """
+        Every id in the collection.
+
+        Needed to compare the two stores. Paged, because a corpus large
+        enough to matter is large enough that fetching it whole is unkind.
+        """
+        col = self._ensure_collection()
+        ids: list[str] = []
+        offset = 0
+        while True:
+            got = col.get(limit=batch_size, offset=offset, include=[])
+            batch = got.get("ids") or []
+            if not batch:
+                break
+            ids.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
+        return ids
+
     # ---- Query ----
 
     def query(

@@ -128,8 +128,25 @@ def index_stats() -> dict[str, object]:
 
     bm25_count = BM25Store.load_or_create(bm25_dir).count()
 
+    # Two counts sitting next to each other and disagreeing is the signal
+    # that would have surfaced #100 months earlier. Say so rather than
+    # leaving the reader to notice.
+    consistent = chroma_count == bm25_count if chroma_count >= 0 else None
+
     return {
         "vector_count": int(chroma_count),
+        "consistent": consistent,
+        **(
+            {}
+            if consistent is not False
+            else {
+                "warning": (
+                    f"The vector store holds {chroma_count} chunks and the lexical "
+                    f"index holds {bm25_count}. Run `rag reconcile` to see what is "
+                    f"stranded."
+                )
+            }
+        ),
         "chroma": {
             "persist_dir": str(chroma_dir),
             "disk_bytes": _du_bytes(chroma_dir),
