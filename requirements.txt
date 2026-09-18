@@ -3,12 +3,11 @@
 # PersistentClient (embedded, when CHROMA_HTTP_URL is unset). Do not add
 # chromadb-client alongside this: it installs into the same chromadb/
 # namespace and the two overwrite each other.
-chromadb>=0.6.3,<0.7
-# chromadb 0.6.3 calls posthog.capture() positionally. posthog 4 changed that
-# signature, so every command printed "Failed to send telemetry event
-# ClientStartEvent: capture() takes 1 positional argument but 3 were given".
-# Telemetry is off either way; this just stops the failure being reported.
-posthog<4
+#
+# 1.x rather than 0.6.3, which carries CVE-2026-45833 (arbitrary code
+# execution) with no fix in the 0.6 line: 0.6.3 is the last release before
+# 1.0.0. Keep this in step with the server image in docker-compose.yml.
+chromadb>=1.5.9,<2
 rank-bm25>=0.2.2,<0.3
 numpy>=1.24,<2.0
 

@@ -237,6 +237,58 @@ mount, so the embedding model is downloaded once rather than on every fresh
 container. Losing that mount means re-downloading about a gigabyte before
 the next question can be answered.
 
+### Upgrading an existing index
+
+The database image moved from Chroma 0.6 to 1.5, which changed where the
+server keeps its files: 1.x reads `/config.yaml` and stores everything under
+`/data`, ignoring the `IS_PERSISTENT` and `PERSIST_DIRECTORY` variables 0.6
+used. The compose file mounts `./indexes/chroma` at the new path, so there is
+nothing to do by hand.
+
+An index written by 0.6 opens in place. No dump and restore is needed, and
+`rag stats` should report the same `vector_count` afterwards as before:
+
+```bash
+rag stats                                  # note vector_count
+docker compose pull chroma
+docker compose up -d --wait chroma
+rag stats                                  # same vector_count, "consistent": true
+```
+
+Rebuild the `rag` image as well, or pull a newer one. The client library is
+installed into the image, and `docker compose run` reuses whatever image is
+already there rather than noticing that `requirements.txt` moved:
+
+```bash
+CLASSMATE_UID=$(id -u) CLASSMATE_GID=$(id -g) docker compose build rag
+# or, if you pull rather than build:
+docker compose pull rag
+```
+
+Skipping this leaves a 0.6 client talking to a 1.5 server, and that pair fails
+the same quiet way as a wrong host:
+
+```
+vector_count: -1
+bm25 count: 2
+```
+
+Take a copy first regardless. The server rewrites the SQLite file and the
+segment directory on first open, so the upgrade is not something you can
+undo by pulling the old image back:
+
+```bash
+cp -a indexes/chroma indexes/chroma.bak
+```
+
+If the counts do not match, `rag reconcile` reports what is stranded, and the
+BM25 catalogue is a complete copy of the corpus:
+
+```bash
+rag dump --path corpus.jsonl    # reads BM25, not Chroma
+rag restore --path corpus.jsonl # re-embeds and rewrites both stores
+```
+
 ### Talking to the database
 
 Inside compose the database is `http://chroma:8000`, not `localhost`.
