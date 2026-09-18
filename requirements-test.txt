@@ -1,6 +1,6 @@
 # Minimal deps to run the unit-test suite (tests/) without pulling the
 # full ML stack (torch, sentence-transformers, llama-cpp-python, chromadb…).
-pydantic>=2.7,<3
+pydantic>=2.13.5,<3
 pytest
 pytest-cov
 
@@ -8,10 +8,10 @@ pytest-cov
 # layer can be covered in CI without dragging in the ML stack. python-dotenv
 # and langdetect come along because rag/retrieval/__init__.py reaches
 # rag.config and rag.utils.lang_detect on import. All four are small.
-numpy>=1.24,<2.0
+numpy>=2.2.6,<3.0
 rank-bm25>=0.2.2,<0.3
-python-dotenv>=1.0,<2
+python-dotenv>=1.2.3,<2
 langdetect>=1.0.9,<1.1
 
 # Lint and format, run in CI alongside the tests.
-ruff>=0.13,<1
+ruff>=0.16.7,<1
