@@ -1,0 +1,4 @@
+# Google Gemini provider SDK, used when LLM_PROVIDER=gemini.
+#
+#   pip install -e ".[gemini]"
+google-genai>=1.0

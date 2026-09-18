@@ -36,6 +36,7 @@ optional-dependencies.dev = { file = ["requirements-test.txt"] }
 # cannot coexist: setuptools refuses the build outright.
 optional-dependencies.anthropic = { file = ["requirements-anthropic.txt"] }
 optional-dependencies.openai = { file = ["requirements-openai.txt"] }
+optional-dependencies.gemini = { file = ["requirements-gemini.txt"] }
 
 [tool.ruff]
 line-length = 120

@@ -105,6 +105,8 @@ class Config:
     openai_model: str | None = None
     # Points the OpenAI adapter at anything speaking the same protocol.
     openai_base_url: str | None = None
+    gemini_api_key: str | None = None
+    gemini_model: str | None = None
     llm_model_path: Path = Path("./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf")
 
     # Optional auto-download parameters (used if model file missing)
@@ -264,6 +266,8 @@ def load_config(reload: bool = False) -> Config:
         openai_api_key=_read_secret_setting("OPENAI_API_KEY"),
         openai_model=_getenv_str("OPENAI_MODEL"),
         openai_base_url=_getenv_str("OPENAI_BASE_URL"),
+        gemini_api_key=_read_secret_setting("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+        gemini_model=_getenv_str("GEMINI_MODEL"),
         llm_model_path=Path(
             _getenv_str("LLM_MODEL_PATH", "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf")
             or "./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf"

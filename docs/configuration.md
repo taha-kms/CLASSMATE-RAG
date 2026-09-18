@@ -26,6 +26,8 @@ cp .env.example .env
 | `OPENAI_API_KEY` | Key for `LLM_PROVIDER=openai`. Prefer `rag config set` | unset |
 | `OPENAI_MODEL` | Model for that provider | `gpt-4o-mini` |
 | `OPENAI_BASE_URL` | Point the OpenAI adapter at another server speaking the same protocol | unset |
+| `GEMINI_API_KEY` | Key for `LLM_PROVIDER=gemini`. `GOOGLE_API_KEY` is accepted too | unset |
+| `GEMINI_MODEL` | Model for that provider | `gemini-2.0-flash` |
 | `MODEL_PROFILE` | Sized model set: `light`, `balanced`, `heavy` or `custom`. See below | `custom` |
 | `LLM_MODEL_PATH` | Local `.gguf` file used when routing is off | `./models/Llama-3.1-8B-Instruct.Q4_K_M.gguf` |
 | `LLM_REPO_ID` | Hugging Face repo to download the model from if it is missing | unset |
@@ -452,3 +454,22 @@ SDK is given a placeholder rather than making you invent one.
 
 Pointing this at a server on your own machine keeps everything local, so
 the privacy note about hosted providers does not apply to that case.
+
+## Using Gemini
+
+```bash
+pip install -e ".[gemini]"
+rag config set GEMINI_API_KEY ...
+LLM_PROVIDER=gemini rag ask "What is the chain rule?" --course Maths
+```
+
+Keys come from https://aistudio.google.com/apikey. `GOOGLE_API_KEY` is
+accepted as an alternative name.
+
+The free tier is rate limited fairly aggressively. That is reported as a
+limit rather than a failure:
+
+```
+Gemini rate limit reached. Wait a moment and ask again, or set
+LLM_PROVIDER=llama_cpp to generate locally.
+```
