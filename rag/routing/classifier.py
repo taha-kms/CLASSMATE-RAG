@@ -22,7 +22,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from rag.embeddings import E5MultilingualEmbedder
+from rag.embeddings import E5MultilingualEmbedder, shared_embedder
 
 from .prototypes import SUBJECT_PROTOTYPES
 from .types import DEFAULT_ROUTE, ROUTES, Route
@@ -55,7 +55,7 @@ class SubjectClassifier:
         embedder: E5MultilingualEmbedder | None = None,
         prototypes: dict[Route, list[str]] | None = None,
     ) -> None:
-        self.embedder = embedder or E5MultilingualEmbedder()
+        self.embedder = embedder or shared_embedder()
         self._prototype_map: dict[Route, np.ndarray] = {}
         self._build_prototypes(prototypes or SUBJECT_PROTOTYPES)
 

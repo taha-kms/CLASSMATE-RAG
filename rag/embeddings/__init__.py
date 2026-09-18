@@ -8,6 +8,7 @@ Provides:
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -111,3 +112,38 @@ class E5MultilingualEmbedder:
 
 
 __all__ = ["E5MultilingualEmbedder"]
+
+
+# One embedder per (model, device, normalize) for the whole process.
+#
+# Two reasons, and the first is a crash rather than a nicety. Building a
+# SentenceTransformer is not thread safe: four concurrent /ask requests each
+# constructed their own and two died with "Cannot copy out of meta tensor",
+# from torch moving the same weights to a device from several threads at once.
+# The second is cost -- the model is about 1.1 GB and several seconds, and
+# every request was paying it.
+_EMBEDDER_CACHE: dict[tuple[str, str | None, bool], E5MultilingualEmbedder] = {}
+_EMBEDDER_LOCK = threading.Lock()
+
+
+def shared_embedder(
+    model_name: str = "intfloat/multilingual-e5-base",
+    device: str | None = None,
+    normalize: bool = True,
+) -> E5MultilingualEmbedder:
+    """Return the process-wide embedder for these settings, building it once.
+
+    Prefer this to constructing E5MultilingualEmbedder directly anywhere that
+    can run concurrently. The constructor stays public because the tests and
+    one-shot scripts want a throwaway instance.
+
+    The lock is held across construction, not just the dictionary write, so
+    that two callers racing on a cold cache cannot both enter SentenceTransformer.
+    """
+    key = (model_name, device, normalize)
+    with _EMBEDDER_LOCK:
+        embedder = _EMBEDDER_CACHE.get(key)
+        if embedder is None:
+            embedder = E5MultilingualEmbedder(model_name=model_name, device=device, normalize=normalize)
+            _EMBEDDER_CACHE[key] = embedder
+        return embedder

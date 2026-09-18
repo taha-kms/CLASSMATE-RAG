@@ -25,7 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover - annotation only
     from rag.pipeline.rag import AskResult
 
 #: Work that happens before, or instead of, token generation.
-Stage = Literal["retrieving", "routing", "loading_model", "generating"]
+Stage = Literal["retrieving", "routing", "waiting", "loading_model", "generating"]
 
 
 @dataclass(frozen=True)
@@ -39,6 +39,7 @@ class StageEvent:
         return {
             "retrieving": "Searching your documents",
             "routing": "Choosing a model",
+            "waiting": "Waiting for another answer to finish",
             "loading_model": "Loading the model",
             "generating": "Writing the answer",
         }[self.stage]
