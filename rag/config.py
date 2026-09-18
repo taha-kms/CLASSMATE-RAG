@@ -64,7 +64,7 @@ def _getenv_int(name: str, default: int) -> int:
         return default
     try:
         return int(val)
-    except Exception:
+    except ValueError:
         return default
 
 
@@ -81,7 +81,7 @@ def _getenv_float(name: str, default: float) -> float:
         return default
     try:
         return float(val)
-    except Exception:
+    except ValueError:
         return default
 
 

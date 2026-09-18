@@ -103,9 +103,16 @@ def _load_project_env() -> None:
             dotenv_path=_PathLike(__file__).resolve().parents[1] / ".env",
             override=False,
         )
-    except Exception:
-        # dotenv missing or the file unreadable: carry on with OS env only.
+    except ImportError:
+        # python-dotenv is optional; the OS environment is a complete config
+        # source on its own, so this one stays quiet.
         pass
+    except Exception as e:  # noqa: BLE001 - bootstrap: never block `rag --help`
+        # This runs before any command, so a failure here must not take the
+        # whole CLI down over an optional convenience. It must not be silent
+        # either: the user set those variables expecting them to apply, and a
+        # quietly ignored .env is a long afternoon.
+        print(f"Warning: .env could not be loaded ({e}); using the environment only.", file=sys.stderr)
 
 
 _load_project_env()
@@ -114,6 +121,7 @@ _load_project_env()
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -124,6 +132,23 @@ from pathlib import Path
 # without sentence-transformers / torch / chromadb installed.
 from rag.metadata import DocumentMetadata, normalize_cli_metadata
 from rag.metadata.validation import validate_cli_metadata
+
+log = logging.getLogger(__name__)
+
+
+def _fail(action: str, exc: Exception, **extra: object) -> int:
+    """Report a failed command as JSON on stderr and give back the exit code.
+
+    Commands catch broadly on purpose: every failure has to become an exit code
+    and one machine-readable line, because scripts and CI parse this. What was
+    missing is the traceback. A swallowed one is how #41 and #100 stayed hidden
+    -- both looked like documented return values. It now goes to the debug log,
+    so LOG_LEVEL=DEBUG brings back the detail without changing the contract.
+    """
+    log.debug("%s failed", action, exc_info=exc)
+    print(json.dumps({"action": action, **extra, "error": str(exc)}), file=sys.stderr)
+    return 1
+
 
 # -----------------------------------------------------------------------------
 # Small helpers
@@ -216,10 +241,8 @@ def cmd_add(args: argparse.Namespace) -> int:
 
     try:
         res = ingest_file(path=path, doc_meta=meta)
-    except Exception as e:
-        # Emit machine-readable error JSON for shell scripts/CI
-        print(json.dumps({"action": "ingest", "file": str(path), "error": str(e)}), file=sys.stderr)
-        return 1
+    except Exception as e:  # noqa: BLE001 - CLI boundary: any failure becomes an exit code
+        return _fail("ingest", e, file=str(path))
 
     # Emit a compact JSON summary for users/automation
     print(
@@ -309,9 +332,8 @@ def cmd_ask(args: argparse.Namespace) -> int:
                 top_k=int(args.k),
                 hybrid=hybrid,
             )
-    except Exception as e:
-        print(json.dumps({"action": "query", "error": str(e)}), file=sys.stderr)
-        return 1
+    except Exception as e:  # noqa: BLE001 - CLI boundary: any failure becomes an exit code
+        return _fail("query", e)
 
     # res.sources holds only what the answer cited, with n matching its [n] markers.
     output = {
@@ -358,9 +380,8 @@ def cmd_preview(args: argparse.Namespace) -> int:
             top_k=int(args.k),
             hybrid=hybrid,
         )
-    except Exception as e:
-        print(json.dumps({"action": "preview", "error": str(e)}), file=sys.stderr)
-        return 1
+    except Exception as e:  # noqa: BLE001 - CLI boundary: any failure becomes an exit code
+        return _fail("preview", e)
 
     print(
         json.dumps(
@@ -440,9 +461,8 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
 
     try:
         result = reconcile_stores(dry_run=not args.apply)
-    except Exception as e:
-        print(json.dumps({"action": "reconcile", "error": str(e)}), file=sys.stderr)
-        return 1
+    except Exception as e:  # noqa: BLE001 - CLI boundary: any failure becomes an exit code
+        return _fail("reconcile", e)
 
     print(json.dumps({"action": "reconcile", **result}, ensure_ascii=False, indent=2))
     return 0
@@ -511,9 +531,8 @@ def cmd_stats(_args: argparse.Namespace) -> int:
 
     try:
         s = index_stats()
-    except Exception as e:
-        print(json.dumps({"action": "stats", "error": str(e)}), file=sys.stderr)
-        return 1
+    except Exception as e:  # noqa: BLE001 - CLI boundary: any failure becomes an exit code
+        return _fail("stats", e)
     print(json.dumps({"action": "stats", **s}, ensure_ascii=False, indent=2))
     return 0
 
@@ -532,9 +551,8 @@ def cmd_dump(args: argparse.Namespace) -> int:
     include_emb = not bool(args.no_emb)
     try:
         n = dump_index(args.path, include_embedding_checksum=include_emb, batch_size=int(args.batch_size))
-    except Exception as e:
-        print(json.dumps({"action": "dump", "error": str(e)}), file=sys.stderr)
-        return 1
+    except Exception as e:  # noqa: BLE001 - CLI boundary: any failure becomes an exit code
+        return _fail("dump", e)
     print(
         json.dumps(
             {"action": "dump", "path": args.path, "wrote": n, "include_embedding_checksum": include_emb},
@@ -553,9 +571,8 @@ def cmd_restore(args: argparse.Namespace) -> int:
 
     try:
         n = restore_dump(args.path, batch_size=int(args.batch_size))
-    except Exception as e:
-        print(json.dumps({"action": "restore", "error": str(e)}), file=sys.stderr)
-        return 1
+    except Exception as e:  # noqa: BLE001 - CLI boundary: any failure becomes an exit code
+        return _fail("restore", e)
     print(json.dumps({"action": "restore", "path": args.path, "restored": n}, ensure_ascii=False, indent=2))
     return 0
 
@@ -570,9 +587,8 @@ def cmd_vacuum(_args: argparse.Namespace) -> int:
 
     try:
         status = vacuum_indexes()
-    except Exception as e:
-        print(json.dumps({"action": "vacuum", "error": str(e)}), file=sys.stderr)
-        return 1
+    except Exception as e:  # noqa: BLE001 - CLI boundary: any failure becomes an exit code
+        return _fail("vacuum", e)
     print(json.dumps({"action": "vacuum", **status}, ensure_ascii=False, indent=2))
     return 0
 
@@ -586,9 +602,8 @@ def cmd_rebuild(args: argparse.Namespace) -> int:
 
     try:
         out = rebuild_embeddings(args.model, batch_size=int(args.batch_size))
-    except Exception as e:
-        print(json.dumps({"action": "rebuild", "error": str(e)}), file=sys.stderr)
-        return 1
+    except Exception as e:  # noqa: BLE001 - CLI boundary: any failure becomes an exit code
+        return _fail("rebuild", e)
     print(json.dumps({"action": "rebuild", **out}, ensure_ascii=False, indent=2))
     return 0
 
@@ -763,9 +778,8 @@ def cmd_reingest(args: argparse.Namespace) -> int:
 
     try:
         res = reingest_paths(targets)
-    except Exception as e:
-        print(json.dumps({"action": "reingest", "error": str(e)}), file=sys.stderr)
-        return 1
+    except Exception as e:  # noqa: BLE001 - CLI boundary: any failure becomes an exit code
+        return _fail("reingest", e)
 
     print(json.dumps({"action": "reingest", "reingested": len(res), "results": res}, ensure_ascii=False, indent=2))
     return 0

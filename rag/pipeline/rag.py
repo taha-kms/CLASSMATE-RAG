@@ -333,10 +333,15 @@ def _concurrent_chunk_pages(
         }
         for fut in as_completed(fut2page):
             page = fut2page[fut]
+            # Not guarded. chunk_text is pure string splitting, so a failure is
+            # a bug rather than bad input, and swallowing it indexed the
+            # document minus that page while still reporting success. An
+            # incomplete corpus that looks complete is the worst outcome here;
+            # the page number makes the failure actionable.
             try:
                 chs = fut.result()
-            except Exception:
-                chs = []
+            except Exception as e:
+                raise RuntimeError(f"Failed to chunk page {page}: {e}") from e
             # only keep the chunk text; we’ll rebuild global ids
             results[page] = [c.text for c in chs if (c.text or "").strip()]
 

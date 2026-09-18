@@ -12,6 +12,7 @@ configured model via `rag.config.load_config()` and downloads it on demand via
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -24,6 +25,8 @@ from rag.generation.llama_backend import (
     require_llama,
 )
 from rag.model_fetch import ensure_llama_model_available
+
+log = logging.getLogger(__name__)
 
 
 class LlamaCppRunner:
@@ -44,9 +47,11 @@ class LlamaCppRunner:
             try:
                 # If the file is missing, this downloads it from HF and returns the path.
                 model_path = ensure_llama_model_available()
-            except Exception:
-                # Fall back to the configured path; existence is enforced below.
-                pass
+            except (OSError, RuntimeError) as e:
+                # No network, no token, or the repo does not carry the file.
+                # Fall back to the configured path; existence is enforced
+                # below, and that error names the path the user can fix.
+                log.info("Could not fetch the model automatically (%s); using %s", e, model_path)
 
         require_llama()
 

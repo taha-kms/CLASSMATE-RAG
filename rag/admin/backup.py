@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -23,6 +24,9 @@ from rag.config import load_config
 from rag.embeddings import E5MultilingualEmbedder
 from rag.embeddings.cache import CachingEmbedder
 from rag.retrieval import BM25Store, ChromaVectorStore
+from rag.retrieval.vector_chroma import VectorStoreUnavailable
+
+log = logging.getLogger(__name__)
 
 # ------------------------------
 # Internal helper functions
@@ -55,7 +59,8 @@ def _iter_bm25_catalog(path: Path | None = None) -> Iterator[tuple[str, str, dic
                 continue
             try:
                 obj = json.loads(line)
-            except Exception:
+            except json.JSONDecodeError:
+                log.warning("Skipping unparseable catalog line: %.80s", line)
                 continue
             cid = str(obj.get("id") or "")
             text = str(obj.get("text") or "")
@@ -157,7 +162,8 @@ def restore_dump(
     for ln in lines:
         try:
             obj = json.loads(ln)
-        except Exception:
+        except json.JSONDecodeError:
+            log.warning("Skipping unparseable dump line: %.80s", ln)
             continue
         cid = str(obj.get("id") or "")
         text = str(obj.get("text") or "")
@@ -193,6 +199,10 @@ def vacuum_indexes() -> dict[str, str]:
 
     vec_store = ChromaVectorStore.from_config()
     status = {"bm25": "saved"}
+    # hasattr already decides whether the method exists, so the only failure
+    # left worth reporting as a status string is the store being unreachable.
+    # An AttributeError here would mean the hasattr lied, which is a bug and
+    # must not be dressed up as routine housekeeping output.
     try:
         if hasattr(vec_store, "compact"):
             vec_store.compact()
@@ -202,7 +212,7 @@ def vacuum_indexes() -> dict[str, str]:
             status["chroma"] = "persisted"
         else:
             status["chroma"] = "no-op"
-    except Exception as e:
+    except VectorStoreUnavailable as e:
         status["chroma"] = f"error: {e}"
 
     return status

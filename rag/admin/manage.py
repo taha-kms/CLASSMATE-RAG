@@ -16,12 +16,15 @@ All operations are safe to repeat (idempotent).
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from rag.config import load_config
 from rag.metadata import DocumentMetadata
+
+log = logging.getLogger(__name__)
 
 # rag.pipeline and rag.retrieval pull torch / chromadb / sentence-transformers.
 # Imported lazily inside the functions that actually need them so that test-only
@@ -67,13 +70,14 @@ def _read_bm25_catalog() -> list[CatalogEntry]:
                 continue
             try:
                 obj = json.loads(line)
-                cid = str(obj.get("id") or "")
-                txt = str(obj.get("text") or "")
-                meta = obj.get("metadata") or {}
-                if cid:
-                    out.append(CatalogEntry(id=cid, text=txt, metadata=dict(meta)))
-            except Exception:
+            except json.JSONDecodeError:
+                log.warning("Skipping unparseable catalog line: %.80s", line)
                 continue
+            cid = str(obj.get("id") or "")
+            txt = str(obj.get("text") or "")
+            meta = obj.get("metadata") or {}
+            if cid:
+                out.append(CatalogEntry(id=cid, text=txt, metadata=dict(meta)))
     return out
 
 
