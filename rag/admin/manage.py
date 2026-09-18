@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -179,8 +180,18 @@ def resolve_ids(
         return [i for i in ids if i in index]
 
     if path:
-        path = str(Path(path).resolve())
-        return [e.id for e in cat if str(e.metadata.get("source_path") or "") == path]
+        # Normalised lexically, with os.path.abspath, rather than with
+        # Path.resolve(). This value only ever serves as a lookup key against
+        # source_path in the catalogue -- nothing opens it -- and resolve()
+        # would stat the filesystem on a string that now arrives over HTTP
+        # from DELETE /chunks. abspath collapses "." and ".." without any
+        # filesystem access at all.
+        #
+        # The cost is that a path reaching a file through a symlink no longer
+        # matches the resolved path recorded at ingest. Passing the real path,
+        # which is what `rag add` printed, still works.
+        wanted = {path, os.path.abspath(path)}
+        return [e.id for e in cat if str(e.metadata.get("source_path") or "") in wanted]
 
     return [e.id for e in cat if _matches_simple(e.metadata, where or {})]
 

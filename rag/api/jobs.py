@@ -12,13 +12,15 @@ that claim to be running with nothing behind them.
 
 from __future__ import annotations
 
+import logging
 import threading
-import traceback
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
+
+log = logging.getLogger(__name__)
 
 JobState = Literal["running", "succeeded", "failed"]
 
@@ -59,14 +61,17 @@ class JobRegistry:
             except Exception as e:  # noqa: BLE001 - a job records its failure rather than killing the thread
                 # There is no caller to propagate to: this runs on its own
                 # thread, and an escaping exception would leave the job stuck
-                # at "running" forever with the reason printed to a log nobody
-                # is reading. The traceback goes into the job so `GET
-                # /admin/jobs/{id}` can show it.
+                # at "running" forever.
+                #
+                # The traceback goes to the log rather than into the response.
+                # It names internal paths and frames, and the operator running
+                # `rag serve` is watching that terminal anyway; `error` carries
+                # the one line a UI needs to show.
+                log.exception("job %s (%s) failed", job.id, operation)
                 with self._lock:
                     job.state = "failed"
                     job.error = f"{type(e).__name__}: {e}"
                     job.finished_at = _now()
-                    job.result = {"traceback": traceback.format_exc()}
             else:
                 with self._lock:
                     job.state = "succeeded"
