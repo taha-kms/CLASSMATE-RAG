@@ -1,0 +1,7 @@
+# OpenAI provider SDK, used when LLM_PROVIDER=openai.
+#
+# Also covers any server speaking the same protocol via OPENAI_BASE_URL:
+# llama.cpp's server, Ollama, vLLM, LM Studio and several vendors.
+#
+#   pip install -e ".[openai]"
+openai>=1.40

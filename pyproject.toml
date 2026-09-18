@@ -35,6 +35,7 @@ optional-dependencies.dev = { file = ["requirements-test.txt"] }
 # inline because `dynamic` and a static [project.optional-dependencies]
 # cannot coexist: setuptools refuses the build outright.
 optional-dependencies.anthropic = { file = ["requirements-anthropic.txt"] }
+optional-dependencies.openai = { file = ["requirements-openai.txt"] }
 
 [tool.ruff]
 line-length = 120
