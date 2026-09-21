@@ -23,14 +23,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Sonar uses history to attribute issues to the commit that
           # introduced them; a shallow clone blames everything on the tip.
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"
@@ -48,6 +48,6 @@ jobs:
           pytest -q --cov --cov-report=xml:artifacts/coverage.xml
 
       - name: SonarCloud scan
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
