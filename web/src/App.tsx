@@ -1,76 +1,58 @@
-import { useState } from 'react';
-import { ApiError, ask } from './api';
-import type { AskResponse } from './types';
+import { useEffect, useState } from 'react';
+import Chat from './Chat';
+import Corpus from './Corpus';
+import Ingest from './Ingest';
+import Preview from './Preview';
+import Settings from './Settings';
+import { useKnobs } from './settings-store';
+
+const VIEWS = ['chat', 'preview', 'ingest', 'corpus', 'settings'] as const;
+type View = (typeof VIEWS)[number];
+
+const LABELS: Record<View, string> = {
+  chat: 'Chat',
+  preview: 'Preview',
+  ingest: 'Ingest',
+  corpus: 'Corpus',
+  settings: 'Settings',
+};
 
 /**
- * A single ask view. The full set of screens (ingest, corpus browser,
- * settings) is #20; this exists so the toolchain has real code to check and
- * the end-to-end tests have a real page to drive.
+ * The view lives in the URL hash, not the path. Paths such as /chunks and
+ * /stats are API routes on the same server, so reloading on one of them would
+ * return JSON instead of this page.
  */
+function viewFromHash(): View {
+  const name = window.location.hash.replace(/^#\/?/, '');
+  return (VIEWS as readonly string[]).includes(name) ? (name as View) : 'chat';
+}
+
 export default function App() {
-  const [question, setQuestion] = useState('');
-  const [result, setResult] = useState<AskResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const [view, setView] = useState<View>(viewFromHash);
+  const [knobs, setKnobs] = useKnobs();
 
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!question.trim()) return;
-
-    setPending(true);
-    setError(null);
-    setResult(null);
-
-    try {
-      setResult(await ask(question));
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Something went wrong.');
-    } finally {
-      setPending(false);
-    }
-  }
+  useEffect(() => {
+    const onHashChange = () => setView(viewFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   return (
     <main>
       <h1>CLASSMATE-RAG</h1>
+      <nav aria-label="Views">
+        {VIEWS.map((name) => (
+          <a key={name} href={`#/${name}`} aria-current={name === view ? 'page' : undefined}>
+            {LABELS[name]}
+          </a>
+        ))}
+      </nav>
 
-      <form onSubmit={onSubmit}>
-        <label htmlFor="question">Question</label>
-        <input
-          id="question"
-          name="question"
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
-          placeholder="What is the chain rule?"
-          autoComplete="off"
-        />
-        <button type="submit" disabled={pending || !question.trim()}>
-          {pending ? 'Asking…' : 'Ask'}
-        </button>
-      </form>
-
-      {error && <p role="alert">{error}</p>}
-
-      {result && (
-        <article aria-label="answer">
-          <p>{result.answer}</p>
-
-          {result.notice && <p data-testid="notice">{result.notice}</p>}
-
-          {result.sources.length > 0 && (
-            <>
-              <h2>Sources</h2>
-              <ol>
-                {result.sources.map((source) => (
-                  <li key={source.n} data-testid="source">
-                    [{source.n}] {source.ref}
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
-        </article>
-      )}
+      {view === 'chat' && <Chat knobs={knobs} />}
+      {view === 'preview' && <Preview knobs={knobs} />}
+      {view === 'ingest' && <Ingest />}
+      {view === 'corpus' && <Corpus />}
+      {view === 'settings' && <Settings knobs={knobs} onKnobs={setKnobs} />}
     </main>
   );
 }
