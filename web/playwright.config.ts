@@ -1,11 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * The API (#19) does not exist yet, so these drive the built bundle and
- * fulfil /api/* from the tests themselves. That is not a stopgap: it keeps
- * the UI's behaviour testable independently of whether generation is fast,
- * or a model is present, or Chroma is up. The flows that genuinely need a
- * live backend are listed in the issue and land with #19 and #20.
+ * These drive the built bundle and fulfil the API's routes from the tests
+ * themselves. That keeps the UI's behaviour testable independently of whether
+ * generation is fast, a model is present, or Chroma is up. The bundle calls
+ * the API at the root, as it does in production when `rag serve` serves both;
+ * the dev-only /api prefix is not in the production build.
  */
 export default defineConfig({
   testDir: './e2e',
