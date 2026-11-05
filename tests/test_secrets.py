@@ -184,6 +184,10 @@ def test_redact_leaves_ordinary_environment_variables_alone(monkeypatch):
         ("https://u:pa ss@proxy.example/v1", "https://proxy.example/v1"),  # whitespace
         ("https://proxy.example/v1?api_key=abc123&x=1", "https://proxy.example/v1"),  # query dropped
         ("https://proxy.example/v1#token=abc", "https://proxy.example/v1"),  # fragment dropped
+        ("https://TOKEN?x@proxy.example/v1", "(hidden: contains credentials)"),  # '?' ends the authority early
+        ("https://TOKEN#x@proxy.example/v1", "(hidden: contains credentials)"),  # so does '#'
+        ("https://user:pa?ss@proxy.example/v1", "(hidden: not a valid URL)"),  # bad port, fails closed
+        ("https://proxy.example/v1?next=a@b", "(hidden: contains credentials)"),  # '@' only in the query
         ("http://[::1]:8000/x", "http://[::1]:8000/x"),
         ("", ""),
     ],
@@ -201,3 +205,17 @@ def test_safe_url_hides_what_it_cannot_parse_with_confidence(raw):
 def test_safe_url_never_leaves_an_at_sign_behind():
     for raw in ("https://a@b@c@host/p", "https://host/pa@th", "https://h:1/@"):
         assert "@" not in secrets.safe_url(raw), raw
+
+
+@pytest.mark.parametrize("secret", ["TOKEN", "hunter2", "s3cr3t"])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "https://{s}?x@proxy.example/v1",
+        "https://{s}#x@proxy.example/v1",
+        "https://u:{s}?x@proxy.example/v1",
+        "https://{s}@proxy.example/v1",
+    ],
+)
+def test_safe_url_never_returns_a_secret_placed_before_an_at_sign(secret, shape):
+    assert secret not in secrets.safe_url(shape.format(s=secret))

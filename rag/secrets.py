@@ -234,6 +234,12 @@ def safe_url(text: str) -> str:
         # No scheme means the userinfo form (user:pass@host) cannot be told apart
         # from a path, so nothing can be kept with confidence.
         return "(hidden: not a valid URL)" if "@" in text else text
+    if "@" in text and ("@" not in parts.netloc or any("@" in x for x in (parts.path, parts.query, parts.fragment))):
+        # An @ that is not cleanly inside the authority means the parser and the
+        # sender disagree about where the host starts: in https://TOKEN?x@host
+        # the '?' ends the authority, so TOKEN becomes the host and the real host
+        # lands in the query. Decide on the original text, not on what survived.
+        return "(hidden: contains credentials)"
     netloc = f"[{host}]" if ":" in host else host
     if port:
         netloc += f":{port}"
