@@ -299,12 +299,18 @@ def create_app() -> FastAPI:
 
         status = vacuum_indexes()
         # vacuum_indexes reports a store failure as "error: <exception text>",
-        # which is right for the CLI. Over HTTP the text stays in the log.
-        for store, outcome in list(status.items()):
-            if outcome.startswith("error"):
+        # which is right for the CLI. Over HTTP only the known outcomes are
+        # passed through; anything else is summarised and left to the log.
+        known = ("saved", "compacted", "persisted", "no-op")
+        result: dict[str, str] = {}
+        for store, outcome in status.items():
+            if outcome in known:
+                # Return the literal from the allow-list, not the value received.
+                result[store] = next(k for k in known if k == outcome)
+            else:
                 log.warning("vacuum: %s reported %s", store, outcome)
-                status[store] = "error: see the server log"
-        return _to_jsonable(status)
+                result[store] = "error: see the server log"
+        return result
 
     @app.post("/admin/dump", status_code=202)
     def dump(req: DumpRequest) -> dict[str, Any]:
