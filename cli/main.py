@@ -536,6 +536,111 @@ def cmd_stats(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_credential(key: str) -> str:
+    """A credential from the terminal prompt or a pipe, never from argv.
+
+    Arguments end up in shell history and in `ps` output for anyone on the
+    machine, which is the leak the credential store exists to avoid.
+    """
+    if sys.stdin.isatty():
+        import getpass
+
+        return getpass.getpass(f"{key} (input hidden): ")
+    return sys.stdin.readline().rstrip("\n")
+
+
+def cmd_config(args: argparse.Namespace) -> int:
+    """List, read, change or remove settings without editing .env by hand (#96)."""
+    from rag import settings
+    from rag.settings import SettingError
+
+    action = args.config_command
+    try:
+        if action == "list":
+            states = settings.describe_all()
+            if args.group:
+                states = [st for st in states if st.setting.group.lower() == args.group.lower()]
+            if args.json:
+                rows = [
+                    {
+                        "key": st.setting.key,
+                        "value": st.value,
+                        "source": st.source,
+                        "overridden": st.overridden,
+                        "restart_required": st.setting.restart,
+                        "group": st.setting.group,
+                        "description": st.setting.description,
+                    }
+                    for st in states
+                ]
+                print(json.dumps(rows, ensure_ascii=False, indent=2))
+                return 0
+            group = None
+            for st in states:
+                if st.setting.group != group:
+                    group = st.setting.group
+                    print(f"\n{group}")
+                flags = ", ".join(
+                    f
+                    for f in (
+                        f"shell overrides .env ({st.file_value})" if st.overridden else "",
+                        "restart" if st.setting.restart else "",
+                    )
+                    if f
+                )
+                shown = st.value if st.value != "" else "(unset)"
+                print(f"  {st.setting.key:<36} {shown:<34} [{st.source}]" + (f"  {flags}" if flags else ""))
+            return 0
+
+        if action == "get":
+            print(settings.describe(args.key).value)
+            return 0
+
+        if action == "set":
+            changes: dict[str, str | None] = {}
+            for item in args.assignments:
+                key, sep, value = item.partition("=")
+                setting = settings.get_setting(key)
+                if setting.kind == "secret":
+                    if sep:
+                        raise SettingError(
+                            setting.key,
+                            "is a credential, so it is not accepted on the command line. "
+                            f"Run `rag config set {setting.key}` and enter it when asked, or pipe it in.",
+                        )
+                    value = _read_credential(setting.key)
+                elif not sep:
+                    raise SettingError(setting.key, "needs a value: rag config set KEY=VALUE")
+                changes[setting.key] = value
+            results = settings.apply_changes(changes, trusted_local=True)
+
+        else:  # unset
+            results = settings.apply_changes({settings.get_setting(k).key: None for k in args.keys}, trusted_local=True)
+    except (SettingError, OSError) as e:
+        return _fail("config", e)
+
+    print(
+        json.dumps(
+            {
+                "action": "config",
+                "changes": [
+                    {
+                        "key": r.key,
+                        "action": r.action,
+                        "applied": r.applied,
+                        "restart_required": r.restart_required,
+                        **({"note": r.note} if r.note else {}),
+                    }
+                    for r in results
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 # ---------- Backup / Export / Migration ----------
 
 
@@ -904,6 +1009,26 @@ def build_parser() -> argparse.ArgumentParser:
     pmd.add_argument("--repo", help="Hugging Face repo id, e.g. Qwen/Qwen2.5-3B-Instruct-GGUF")
     pmd.add_argument("--file", help="Filename within the repo, e.g. qwen2.5-3b-instruct-q4_k_m.gguf")
     pm.set_defaults(func=cmd_model)
+
+    pc = sub.add_parser("config", help="List, read, change or remove settings (no .env editing)")
+    pcsub = pc.add_subparsers(dest="config_command", required=True)
+
+    pcl = pcsub.add_parser("list", help="Show every setting, its value and where the value came from")
+    pcl.add_argument("--group", help="Only one group, e.g. Retrieval")
+    pcl.add_argument("--json", action="store_true", help="Machine-readable output")
+
+    pcg = pcsub.add_parser("get", help="Print one setting's effective value (credentials are masked)")
+    pcg.add_argument("key")
+
+    pcs = pcsub.add_parser(
+        "set",
+        help="Set one or more settings: KEY=VALUE ... (a credential is entered when asked, not given here)",
+    )
+    pcs.add_argument("assignments", nargs="+", metavar="KEY=VALUE")
+
+    pcu = pcsub.add_parser("unset", help="Remove settings, falling back to their defaults")
+    pcu.add_argument("keys", nargs="+", metavar="KEY")
+    pc.set_defaults(func=cmd_config)
 
     ps = sub.add_parser("stats", help="Show index health and disk usage")
     ps.set_defaults(func=cmd_stats)

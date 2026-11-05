@@ -200,8 +200,11 @@ def redact(text: str) -> str:
     redacted = _KEY_SHAPES.sub(lambda m: mask(m.group(0)), text)
 
     # Also scrub the exact values that are configured, which catches keys
-    # whose shape is not known here.
-    for value in load_secrets().values():
+    # whose shape is not known here. That includes anything exported under a
+    # credential-looking name: a key with no recognisable prefix is still in
+    # the environment, and shape matching alone would let it through.
+    exported = (v for k, v in os.environ.items() if is_secret(k))
+    for value in (*load_secrets().values(), *exported):
         if value and len(value) > 8:
             redacted = redacted.replace(value, mask(value))
     return redacted

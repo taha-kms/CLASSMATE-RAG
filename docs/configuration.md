@@ -112,7 +112,47 @@ turning it on.
 | `ROUTE_METADATA_THRESHOLD` | Share of retrieved chunks that must agree on a subject | `0.60` |
 | `ROUTE_TRANSLATION_REQUIRES_INTENT` | Require an explicit translate keyword for that route | `true` |
 
-> 💡 After changing `.env`, restart your environment to apply settings.
+> 💡 You do not have to edit `.env` by hand. See [Changing settings](#changing-settings).
+
+### Changing settings
+
+`rag config` reads and changes every setting in the tables above, checks the value
+first, and keeps the comments and ordering in your `.env`:
+
+```bash
+rag config list                       # every setting, its value, and where the value came from
+rag config list --group Retrieval
+rag config get K_VECTOR
+rag config set K_VECTOR=12 K_BM25=12  # several at once; nothing is written if one is invalid
+rag config unset K_VECTOR             # back to the default
+rag config set OPENAI_API_KEY         # a credential: you are asked for it, it is never an argument
+```
+
+**Where a value comes from.** Your shell beats `.env`, which beats the default. If a
+variable is exported in your shell, `rag config set` still updates the file but says
+the shell overrides it, and `rag config list` shows `shell overrides .env (<file value>)`.
+Nothing is reported as applied when it did not apply.
+
+**Restart.** Settings marked `restart` are set up once when the program starts (models,
+storage paths, routing, logging), so a change applies the next time you run `rag`. Changing
+`EMBEDDING_MODEL_NAME` also makes the existing index unreadable until you run `rag rebuild`.
+The others apply on the next question or ingest.
+
+**Settings that decide where your data goes** (`OPENAI_BASE_URL`, `CHROMA_HTTP_URL`) can be changed with
+`rag config set` on this machine but not from the web page or the API. The API has no authentication, so
+anyone who could reach its port could otherwise point a stored API key at a server of their choosing.
+
+**Credentials** (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `HF_TOKEN`) are stored in
+`.secrets.env`, not `.env`, with owner-only permissions. They are never printed in full. Pipe one
+in with `printf '%s' "$KEY" | rag config set OPENAI_API_KEY`; do not put it on the command line,
+where it ends up in your shell history.
+
+**A running `rag serve`** reads its settings when it starts. Changing `.env` with `rag config`
+from another terminal does not reach it; restart the server.
+
+A key is stored as given: it is not tried against the provider when you save it, so a wrong
+key shows up on the first question.
+
 
 ---
 

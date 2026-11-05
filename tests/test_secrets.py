@@ -156,3 +156,15 @@ def test_a_configured_value_is_scrubbed_even_if_its_shape_is_unknown():
 def test_redacting_ordinary_text_changes_nothing():
     assert secrets.redact("no credentials here at all") == "no credentials here at all"
     assert secrets.redact("") == ""
+
+
+def test_redact_scrubs_an_exported_credential_that_has_no_recognisable_shape(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "plain-long-credential-value-no-prefix")
+    out = secrets.redact("the server said: plain-long-credential-value-no-prefix was rejected")
+    assert "plain-long-credential" not in out
+    assert "rejected" in out
+
+
+def test_redact_leaves_ordinary_environment_variables_alone(monkeypatch):
+    monkeypatch.setenv("SOME_PLAIN_SETTING", "a-perfectly-ordinary-value")
+    assert secrets.redact("a-perfectly-ordinary-value") == "a-perfectly-ordinary-value"
