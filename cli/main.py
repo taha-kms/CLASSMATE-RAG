@@ -77,43 +77,10 @@ Implementation map:
 from __future__ import annotations
 
 # --- LOAD .env EARLY (so HF cache vars take effect before imports) ------------
-from pathlib import Path as _PathLike
-
-
-def _load_project_env() -> None:
-    """
-    Load the project .env before the heavy imports further down.
-
-    The timing matters: transformers and sentence-transformers read their
-    cache variables (HF_HOME, HUGGINGFACE_HUB_CACHE, SENTENCE_TRANSFORMERS_HOME)
-    at import time, so the file has to be read first. Chroma connection
-    settings and HF_TOKEN come from here too.
-
-    override=False on purpose. A variable already exported in the shell beats
-    the file, which is how dotenv is normally expected to work and what
-    rag.config has always done. With override=True, `LOG_LEVEL=DEBUG rag stats`
-    was silently ignored because .env happened to set LOG_LEVEL, while a
-    setting merely commented out in .env worked fine — so whether an override
-    took effect depended on whether a line was uncommented.
-    """
-    try:
-        from dotenv import load_dotenv  # type: ignore
-
-        load_dotenv(
-            dotenv_path=_PathLike(__file__).resolve().parents[1] / ".env",
-            override=False,
-        )
-    except ImportError:
-        # python-dotenv is optional; the OS environment is a complete config
-        # source on its own, so this one stays quiet.
-        pass
-    except Exception as e:  # noqa: BLE001 - bootstrap: never block `rag --help`
-        # This runs before any command, so a failure here must not take the
-        # whole CLI down over an optional convenience. It must not be silent
-        # either: the user set those variables expecting them to apply, and a
-        # quietly ignored .env is a long afternoon.
-        print(f"Warning: .env could not be loaded ({e}); using the environment only.", file=sys.stderr)
-
+# The implementation lives in rag.bootstrap because `rag serve` needs the same
+# thing at the same point, and two copies would drift. rag.bootstrap imports
+# nothing heavy, so this does not defeat the ordering it exists to protect.
+from rag.bootstrap import load_project_env as _load_project_env
 
 _load_project_env()
 # -----------------------------------------------------------------------------
@@ -521,6 +488,38 @@ def cmd_profiles(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Run the local HTTP API, and the frontend if it has been built."""
+    try:
+        import uvicorn
+    except ImportError:
+        print(
+            json.dumps(
+                {
+                    "action": "serve",
+                    "error": 'The API extra is not installed. Run: pip install -e ".[api]"',
+                }
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
+    from rag.api.app import create_app
+
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        # Not a prompt to override. There is no authentication anywhere in the
+        # app, and DELETE /chunks plus the admin endpoints are reachable by
+        # anyone who can reach the port.
+        print(
+            f"Warning: binding to {args.host} exposes an API with no authentication, "
+            f"including endpoints that delete your corpus.",
+            file=sys.stderr,
+        )
+
+    uvicorn.run(create_app(), host=args.host, port=args.port, log_level=args.log_level)
+    return 0
+
+
 def cmd_stats(_args: argparse.Namespace) -> int:
     """
     Show index health (counts + disk usage).
@@ -908,6 +907,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     ps = sub.add_parser("stats", help="Show index health and disk usage")
     ps.set_defaults(func=cmd_stats)
+
+    # --- serve ---
+    pserve = sub.add_parser("serve", help="Run the local HTTP API and web UI")
+    # Loopback by default and documented as such. This is the whole security
+    # model: the API has no authentication by design, because every student
+    # runs their own copy against their own corpus.
+    pserve.add_argument("--host", default="127.0.0.1", help="Interface to bind (default: 127.0.0.1)")
+    pserve.add_argument("--port", type=int, default=8080, help="Port to listen on (default: 8080)")
+    pserve.add_argument(
+        "--log-level",
+        default="info",
+        choices=["critical", "error", "warning", "info", "debug", "trace"],
+        help="uvicorn log level (default: info)",
+    )
+    pserve.set_defaults(func=cmd_serve)
 
     # --- dump ---
     pd = sub.add_parser("dump", help="Export corpus to a JSONL dump")
