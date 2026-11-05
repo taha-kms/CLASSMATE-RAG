@@ -199,6 +199,8 @@ def test_an_exported_credential_with_no_recognisable_shape_cannot_surface_throug
         ("https://someone:pa/ssword-fake@proxy.example/v1", "(hidden"),  # '/' makes it unparseable
         ("https://someone:p@ss/wo@rd-fake@proxy.example/v1", "(hidden"),  # both
         ("https://proxy.example/v1?api_key=ssword-fake", "https://proxy.example/v1"),  # token in the query
+        ("https://ssword-fake?x@proxy.example/v1", "(hidden"),  # bare token as userinfo, ended early by "?"
+        ("https://ssword-fake#x@proxy.example/v1", "(hidden"),  # or by "#"
     ],
 )
 def test_no_part_of_a_credential_survives_in_a_url_setting(client, isolated, url, shown):
