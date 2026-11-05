@@ -200,8 +200,48 @@ def redact(text: str) -> str:
     redacted = _KEY_SHAPES.sub(lambda m: mask(m.group(0)), text)
 
     # Also scrub the exact values that are configured, which catches keys
-    # whose shape is not known here.
-    for value in load_secrets().values():
+    # whose shape is not known here. That includes anything exported under a
+    # credential-looking name: a key with no recognisable prefix is still in
+    # the environment, and shape matching alone would let it through.
+    exported = (v for k, v in os.environ.items() if is_secret(k))
+    for value in (*load_secrets().values(), *exported):
         if value and len(value) > 8:
             redacted = redacted.replace(value, mask(value))
     return redacted
+
+
+def safe_url(text: str) -> str:
+    """
+    A URL with nothing in it that could be a credential.
+
+    Rebuilt from the scheme, host, port and path only: the userinfo (which may
+    itself contain '@' or '/'), the query and the fragment are dropped, instead
+    of being pattern-matched out of the original text. If it cannot be parsed
+    into something with no '@' left, the whole value is hidden: a mistake here
+    should leave out too much rather than too little.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+
+    if not text:
+        return text
+    try:
+        parts = urlsplit(text)
+        host = parts.hostname
+        port = parts.port
+    except ValueError:
+        return "(hidden: not a valid URL)"
+    if not parts.scheme or not host:
+        # No scheme means the userinfo form (user:pass@host) cannot be told apart
+        # from a path, so nothing can be kept with confidence.
+        return "(hidden: not a valid URL)" if "@" in text else text
+    if "@" in text and ("@" not in parts.netloc or any("@" in x for x in (parts.path, parts.query, parts.fragment))):
+        # An @ that is not cleanly inside the authority means the parser and the
+        # sender disagree about where the host starts: in https://TOKEN?x@host
+        # the '?' ends the authority, so TOKEN becomes the host and the real host
+        # lands in the query. Decide on the original text, not on what survived.
+        return "(hidden: contains credentials)"
+    netloc = f"[{host}]" if ":" in host else host
+    if port:
+        netloc += f":{port}"
+    rebuilt = urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+    return rebuilt if "@" not in rebuilt else "(hidden: contains credentials)"

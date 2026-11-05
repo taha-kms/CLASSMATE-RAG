@@ -156,3 +156,66 @@ def test_a_configured_value_is_scrubbed_even_if_its_shape_is_unknown():
 def test_redacting_ordinary_text_changes_nothing():
     assert secrets.redact("no credentials here at all") == "no credentials here at all"
     assert secrets.redact("") == ""
+
+
+def test_redact_scrubs_an_exported_credential_that_has_no_recognisable_shape(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "plain-long-credential-value-no-prefix")
+    out = secrets.redact("the server said: plain-long-credential-value-no-prefix was rejected")
+    assert "plain-long-credential" not in out
+    assert "rejected" in out
+
+
+def test_redact_leaves_ordinary_environment_variables_alone(monkeypatch):
+    monkeypatch.setenv("SOME_PLAIN_SETTING", "a-perfectly-ordinary-value")
+    assert secrets.redact("a-perfectly-ordinary-value") == "a-perfectly-ordinary-value"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("https://proxy.example/v1", "https://proxy.example/v1"),
+        ("http://localhost:8001", "http://localhost:8001"),
+        ("https://u:pw@proxy.example:8443/v1", "https://proxy.example:8443/v1"),
+        ("https://u:p@ss@proxy.example/v1", "https://proxy.example/v1"),  # '@' in the password
+        (
+            "https://u:pa/ss@proxy.example/v1",
+            "(hidden: not a valid URL)",
+        ),  # "/" ends the authority early, leaving a bad port
+        ("https://u:pa ss@proxy.example/v1", "https://proxy.example/v1"),  # whitespace
+        ("https://proxy.example/v1?api_key=abc123&x=1", "https://proxy.example/v1"),  # query dropped
+        ("https://proxy.example/v1#token=abc", "https://proxy.example/v1"),  # fragment dropped
+        ("https://TOKEN?x@proxy.example/v1", "(hidden: contains credentials)"),  # '?' ends the authority early
+        ("https://TOKEN#x@proxy.example/v1", "(hidden: contains credentials)"),  # so does '#'
+        ("https://user:pa?ss@proxy.example/v1", "(hidden: not a valid URL)"),  # bad port, fails closed
+        ("https://proxy.example/v1?next=a@b", "(hidden: contains credentials)"),  # '@' only in the query
+        ("http://[::1]:8000/x", "http://[::1]:8000/x"),
+        ("", ""),
+    ],
+)
+def test_safe_url_keeps_only_scheme_host_port_and_path(raw, expected):
+    assert secrets.safe_url(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["user:pass@proxy.example", "//u:p@proxy.example/x", "https://u:p@", "http://[bad"])
+def test_safe_url_hides_what_it_cannot_parse_with_confidence(raw):
+    out = secrets.safe_url(raw)
+    assert out.startswith("(hidden") and "pass" not in out and "@" not in out
+
+
+def test_safe_url_never_leaves_an_at_sign_behind():
+    for raw in ("https://a@b@c@host/p", "https://host/pa@th", "https://h:1/@"):
+        assert "@" not in secrets.safe_url(raw), raw
+
+
+@pytest.mark.parametrize("secret", ["TOKEN", "hunter2", "s3cr3t"])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "https://{s}?x@proxy.example/v1",
+        "https://{s}#x@proxy.example/v1",
+        "https://u:{s}?x@proxy.example/v1",
+        "https://{s}@proxy.example/v1",
+    ],
+)
+def test_safe_url_never_returns_a_secret_placed_before_an_at_sign(secret, shape):
+    assert secret not in secrets.safe_url(shape.format(s=secret))
