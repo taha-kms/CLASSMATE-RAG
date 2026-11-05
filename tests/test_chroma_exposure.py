@@ -21,12 +21,12 @@ def test_loopback_is_not_a_problem(bind, url):
 @pytest.mark.parametrize("bind", ["0.0.0.0", "::", "192.168.1.20"])
 def test_publishing_beyond_loopback_is_reported(bind):
     (message,) = chroma_exposure_warnings("http://localhost:8000", bind)
-    assert "CHROMA_BIND_HOST" in message and bind in message
+    assert message.startswith(f"CHROMA_BIND_HOST={bind} publishes the Chroma port beyond this machine.")
 
 
 def test_a_remote_server_is_reported():
     (message,) = chroma_exposure_warnings("http://chroma.example.org:8000", "")
-    assert "CHROMA_HTTP_URL" in message and "chroma.example.org" in message
+    assert message.startswith("CHROMA_HTTP_URL points at chroma.example.org, not this machine.")
 
 
 def test_both_problems_are_both_reported():
