@@ -4,4 +4,4 @@
 # llama.cpp's server, Ollama, vLLM, LM Studio and several vendors.
 #
 #   pip install -e ".[openai]"
-openai>=1.40
+openai>=3.42.1
