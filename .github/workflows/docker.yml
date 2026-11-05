@@ -139,6 +139,22 @@ jobs:
               print(f"trivy findings: {total}  " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items())))
           PY
 
+      # The scan above reports everything and never fails. This one fails on
+      # CRITICAL only, so a new critical finding is a visible decision rather than
+      # a row in the Security tab nobody opens. That is how a wrong "scans clean"
+      # claim about chromadb went unchallenged (#130). Known, unfixable findings
+      # live in .trivyignore with a reason and an expiry.
+      - name: Fail on new CRITICAL findings
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: classmate-rag:ci
+          format: table
+          scanners: vuln
+          severity: CRITICAL
+          exit-code: "1"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+
       # Publish the image that was just smoke tested, by retagging it rather
       # than building again. A second build could produce something subtly
       # different from the artefact the checks above passed against, and a

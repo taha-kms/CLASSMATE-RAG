@@ -1,0 +1,16 @@
+# Findings we cannot fix by upgrading. Each entry has a reason, an issue, and an
+# expiry: after the date the CI gate fails again, which forces a decision instead
+# of letting an exception become permanent. Format: https://trivy.dev/docs/configuration/filtering/
+
+# chromadb 1.5.9, the latest release. No fixed version exists. Exposure is limited
+# to Chroma's HTTP port, which is loopback-only by default. See #130 and
+# docs/configuration.md#known-security-issues.
+CVE-2026-45829 exp:2027-02-05
+CVE-2026-45833 exp:2027-02-05
+CVE-2026-45830 exp:2027-02-05
+CVE-2026-45831 exp:2027-02-05
+
+# sentence-transformers 2.7.0. Fixed in 5.6.0, a three-major upgrade that needs the
+# embeddings checked against the existing index. Needs write access to a model
+# directory on disk. See #137.
+CVE-2026-68770 exp:2027-02-05

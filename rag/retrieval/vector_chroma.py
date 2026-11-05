@@ -34,6 +34,48 @@ class VectorStoreUnavailable(RuntimeError):
     """
 
 
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1", "")
+_already_warned: set[str] = set()
+
+
+def chroma_exposure_warnings(http_url: str, bind_host: str) -> list[str]:
+    """Reasons the Chroma server may be reachable by someone other than this user.
+
+    chromadb 1.x has unpatched code-injection and tenant-isolation CVEs that
+    need access to its HTTP port (#130). Loopback is what makes that tolerable,
+    so anything else is worth saying out loud. Two places can break it: the
+    interface docker-compose publishes the port on, and a client URL that points
+    at a server somewhere else.
+    """
+    from urllib.parse import urlparse
+
+    problems: list[str] = []
+    bind = (bind_host or "").strip().lower()
+    if bind not in _LOOPBACK_HOSTS:
+        problems.append(
+            f"CHROMA_BIND_HOST={bind_host} publishes the Chroma port beyond this machine. "
+            "Chroma has no authentication and known unpatched vulnerabilities."
+        )
+    try:
+        host = (urlparse(http_url).hostname or "").lower()
+    except ValueError:
+        host = ""  # the caller reports an unusable URL; not a second complaint
+    if host not in _LOOPBACK_HOSTS:
+        problems.append(
+            f"CHROMA_HTTP_URL points at {host}, not this machine. "
+            "That server has no authentication and known unpatched vulnerabilities."
+        )
+    return problems
+
+
+def _warn_if_chroma_exposed(http_url: str) -> None:
+    """Log each distinct exposure once per process, not once per query."""
+    for message in chroma_exposure_warnings(http_url, os.getenv("CHROMA_BIND_HOST", "")):
+        if message not in _already_warned:
+            _already_warned.add(message)
+            log.warning("%s See docs/configuration.md#known-security-issues.", message)
+
+
 def _slug_tag(t: str) -> str:
     import re
 
@@ -139,6 +181,7 @@ class ChromaVectorStore:
                 host = parsed.hostname
             if parsed.port:
                 port = parsed.port
+            _warn_if_chroma_exposed(http_url)
             host = self._normalize_host(host)
             from chromadb.config import Settings
 
