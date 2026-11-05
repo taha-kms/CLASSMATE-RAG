@@ -124,7 +124,8 @@ class TestAskStream:
         assert r.status_code == 200  # cannot be changed after the first byte
         name, payload = sse_events(r.text)[-1]
         assert name == "error"
-        assert "the model fell over" in payload["error"]
+        assert "server log" in payload["error"]
+        assert "the model fell over" not in r.text  # the reason goes to the log, not the wire
 
     @pytest.mark.parametrize(
         "body",
@@ -276,3 +277,13 @@ class TestBindingIsLocalOnly:
 
         args = build_parser().parse_args(["serve"])
         assert args.host == "127.0.0.1"
+
+
+class TestVacuumErrors:
+    def test_a_store_failure_is_summarised_not_echoed(self, client):
+        leaky = {"bm25": "saved", "chroma": "error: connect to /home/someone/secret failed"}
+        with patch("rag.admin.backup.vacuum_indexes", return_value=leaky):
+            body = client.post("/admin/vacuum").json()
+        assert body["bm25"] == "saved"
+        assert body["chroma"] == "error: see the server log"
+        assert "/home/someone" not in str(body)

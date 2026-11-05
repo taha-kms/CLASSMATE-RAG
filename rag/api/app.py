@@ -111,12 +111,15 @@ def create_app() -> FastAPI:
                         yield _sse("replace", {"reason": event.reason})
                     elif isinstance(event, FinalEvent):
                         yield _sse("final", event.result)
-            except Exception as e:  # noqa: BLE001 - the response has already begun
+            except Exception:  # noqa: BLE001 - the response has already begun
                 # Headers went out with the first event, so raising here gives
                 # the client a truncated stream and no reason. An error event
                 # is the only way left to say what happened.
                 log.exception("ask stream failed")
-                yield _sse("error", {"error": f"{type(e).__name__}: {e}"})
+                # The reason stays in the log, where the operator running
+                # `rag serve` already looks: exception text can carry paths and
+                # internals, and this endpoint has no authentication.
+                yield _sse("error", {"error": "The answer could not be generated. See the server log for details."})
 
         return StreamingResponse(
             events(),
@@ -294,7 +297,14 @@ def create_app() -> FastAPI:
         """Fast enough to answer inline, unlike its neighbours."""
         from rag.admin.backup import vacuum_indexes
 
-        return _to_jsonable(vacuum_indexes())
+        status = vacuum_indexes()
+        # vacuum_indexes reports a store failure as "error: <exception text>",
+        # which is right for the CLI. Over HTTP the text stays in the log.
+        for store, outcome in list(status.items()):
+            if outcome.startswith("error"):
+                log.warning("vacuum: %s reported %s", store, outcome)
+                status[store] = "error: see the server log"
+        return _to_jsonable(status)
 
     @app.post("/admin/dump", status_code=202)
     def dump(req: DumpRequest) -> dict[str, Any]:
