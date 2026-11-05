@@ -18,8 +18,13 @@ jobs:
     name: SonarCloud
     runs-on: ubuntu-latest
     # Forked pull requests cannot read secrets, so the scan would fail with a
-    # missing token rather than tell anyone anything useful.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # missing token rather than tell anyone anything useful. Dependabot runs
+    # are the same case: they read Dependabot's secret store, not Actions',
+    # so SONAR_TOKEN is empty and the scanner exits 3 on every one of its PRs.
+    if: >-
+      github.event_name == 'push' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]')
 
     steps:
       - name: Checkout
