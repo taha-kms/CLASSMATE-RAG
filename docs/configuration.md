@@ -134,13 +134,17 @@ the shell overrides it, and `rag config list` shows `shell overrides .env (<file
 Nothing is reported as applied when it did not apply.
 
 **Restart.** Settings marked `restart` are set up once when the program starts (models,
-storage paths, routing, logging), so a change applies the next time you run `rag`. Changing
+storage paths, routing, logging). A change is saved to `.env` but **not applied to a running `rag serve`**: the
+page keeps showing what the server is using, with the saved value next to it, until you restart. Run on the
+command line, it applies the next time you run `rag`. Changing
 `EMBEDDING_MODEL_NAME` also makes the existing index unreadable until you run `rag rebuild`.
 The others apply on the next question or ingest.
 
-**Settings that decide where your data goes** (`OPENAI_BASE_URL`, `CHROMA_HTTP_URL`) can be changed with
-`rag config set` on this machine but not from the web page or the API. The API has no authentication, so
-anyone who could reach its port could otherwise point a stored API key at a server of their choosing.
+**Settings that decide where your data goes or what gets loaded** can be changed with `rag config set` on this
+machine but not from the web page or the API: `OPENAI_BASE_URL`, `CHROMA_HTTP_URL`, `EMBEDDING_MODEL_NAME`,
+every `*_MODEL_PATH`, and the storage directories (`CHROMA_PERSIST_DIRECTORY`, `BM25_DIRECTORY`,
+`EMB_CACHE_DIR`). The API has no authentication, so anyone who could reach its port could otherwise send your
+questions to a server of their choosing, or point the model path at a file they uploaded.
 
 **Credentials** (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `HF_TOKEN`) are stored in
 `.secrets.env`, not `.env`, with owner-only permissions. They are never printed in full. Pipe one

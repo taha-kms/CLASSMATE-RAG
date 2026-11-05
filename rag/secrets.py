@@ -208,3 +208,34 @@ def redact(text: str) -> str:
         if value and len(value) > 8:
             redacted = redacted.replace(value, mask(value))
     return redacted
+
+
+def safe_url(text: str) -> str:
+    """
+    A URL with nothing in it that could be a credential.
+
+    Rebuilt from the scheme, host, port and path only: the userinfo (which may
+    itself contain '@' or '/'), the query and the fragment are dropped, instead
+    of being pattern-matched out of the original text. If it cannot be parsed
+    into something with no '@' left, the whole value is hidden: a mistake here
+    should leave out too much rather than too little.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+
+    if not text:
+        return text
+    try:
+        parts = urlsplit(text)
+        host = parts.hostname
+        port = parts.port
+    except ValueError:
+        return "(hidden: not a valid URL)"
+    if not parts.scheme or not host:
+        # No scheme means the userinfo form (user:pass@host) cannot be told apart
+        # from a path, so nothing can be kept with confidence.
+        return "(hidden: not a valid URL)" if "@" in text else text
+    netloc = f"[{host}]" if ":" in host else host
+    if port:
+        netloc += f":{port}"
+    rebuilt = urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+    return rebuilt if "@" not in rebuilt else "(hidden: contains credentials)"

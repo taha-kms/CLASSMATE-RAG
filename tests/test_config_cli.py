@@ -17,6 +17,7 @@ def isolated(monkeypatch, tmp_path):
     env.write_text("# my settings\nK_VECTOR=8\n", encoding="utf-8")
     monkeypatch.setattr(settings, "env_file_path", lambda: env)
     monkeypatch.setattr(secrets, "secrets_path", lambda: tmp_path / ".secrets.env")
+    monkeypatch.setattr(settings, "_PENDING", {})
     monkeypatch.setattr(config, "load_dotenv", lambda *a, **k: False)
     monkeypatch.setattr(config, "__CONFIG_SINGLETON", getattr(config, "__CONFIG_SINGLETON"), raising=False)
     for s in REGISTRY:

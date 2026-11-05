@@ -27,7 +27,7 @@ import stat
 import tempfile
 import unicodedata
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -309,7 +309,33 @@ REGISTRY: tuple[Setting, ...] = (
     Setting("HF_TOKEN", "secret", "", _CREDS, "Token for private or gated Hugging Face repos."),
 )
 
+#: Settings that decide what code or data the application loads, or where it is
+#: stored. Over an unauthenticated API they would let a caller who can already
+#: upload a file (POST /ingest keeps it under data/uploads/) point
+#: LLM_MODEL_PATH at it, or move the index somewhere of their choosing. Like
+#: the *_URL settings, they are changed from the command line on this machine.
+_ALSO_LOCAL_ONLY = frozenset(
+    {
+        "EMBEDDING_MODEL_NAME",
+        "LLM_MODEL_PATH",
+        "ROUTE_MATH_MODEL_PATH",
+        "ROUTE_CODE_MODEL_PATH",
+        "ROUTE_TRANSLATION_MODEL_PATH",
+        "ROUTE_DEFAULT_MODEL_PATH",
+        "CHROMA_PERSIST_DIRECTORY",
+        "BM25_DIRECTORY",
+        "EMB_CACHE_DIR",
+    }
+)
+REGISTRY = tuple(replace(s, local_only=True) if s.key in _ALSO_LOCAL_ONLY else s for s in REGISTRY)
+
 _BY_KEY: dict[str, Setting] = {s.key: s for s in REGISTRY}
+
+#: Restart-required changes this process has written to .env but deliberately
+#: not applied. Applying them live would be wrong: flipping ENABLE_ROUTING in a
+#: running server could load four 7B models. key -> the value now in the file
+#: ("" when removed).
+_PENDING: dict[str, str] = {}
 _TRUE = ("1", "true", "yes", "y", "on")
 _FALSE = ("0", "false", "no", "n", "off")
 
@@ -473,6 +499,9 @@ class SettingState:
     overridden: bool = False
     #: What ``.env`` says, when it disagrees with the effective value.
     file_value: str | None = None
+    #: A saved change to a restart-required setting that the running process has
+    #: not picked up. ``value`` is still what is in use.
+    pending_value: str | None = None
 
 
 def _shell_overrides(key: str, file_values: Mapping[str, str]) -> bool:
@@ -482,6 +511,8 @@ def _shell_overrides(key: str, file_values: Mapping[str, str]) -> bool:
     ``load_dotenv`` copies the file into ``os.environ``, so after loading the
     two look identical. They differ only when the shell set something else.
     """
+    if key in _PENDING:
+        return False  # the environment holds the value from before our own pending save
     env = os.environ.get(key)
     if env is None or env == "":
         return False
@@ -503,6 +534,19 @@ def describe(key: str, *, env_path: Path | None = None) -> SettingState:
 
     file_values = _file_values(env_path or env_file_path())
     file_value = file_values.get(setting.key)
+    if setting.key in _PENDING:
+        # Report what the running process uses, and what will replace it.
+        running = os.environ.get(setting.key) or ""
+        pending = file_value or ""
+        if running == pending:
+            _PENDING.pop(setting.key, None)  # changed back, nothing is waiting any more
+        else:
+            return SettingState(
+                setting,
+                running or setting.default,
+                "file" if running else "default",
+                pending_value=pending,
+            )
     if _shell_overrides(setting.key, file_values):
         env = os.environ[setting.key]
         overridden = file_value is not None and file_value != env
@@ -588,7 +632,10 @@ def apply_changes(
         blocked = _shell_overrides(key, file_values) and os.environ.get(key) != value
         env_updates[key] = value if action == "set" else None
         if not blocked:
-            if action == "set":
+            if setting.restart:
+                # Saved to .env, not applied: see _PENDING.
+                _PENDING[key] = value if action == "set" else ""  # type: ignore[assignment]
+            elif action == "set":
                 os.environ[key] = value  # type: ignore[assignment]
             else:
                 os.environ.pop(key, None)

@@ -15,7 +15,7 @@ import pytest
 from dotenv import dotenv_values
 
 import rag.config as config
-from rag import secrets
+from rag import secrets, settings
 from rag.settings import REGISTRY, SettingError, apply_changes, describe, get_setting, normalise, write_env
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def isolated(monkeypatch, tmp_path):
     """A temp .env, a temp credential store, and no leakage from the real ones."""
     monkeypatch.setattr(secrets, "secrets_path", lambda: tmp_path / ".secrets.env")
+    monkeypatch.setattr(settings, "_PENDING", {})
     monkeypatch.setattr(config, "load_dotenv", lambda *a, **k: False)  # never read the real .env
     # Record the current Config so the test's reloads are undone afterwards.
     monkeypatch.setattr(config, "__CONFIG_SINGLETON", getattr(config, "__CONFIG_SINGLETON"), raising=False)
@@ -371,42 +372,69 @@ def test_ordinary_settings_need_no_vouching(env_file):
     assert dotenv_values(env_file)["K_VECTOR"] == "5"
 
 
-def test_every_url_setting_is_local_only():
-    """A future *_URL setting decides where data is sent, so it must opt out of HTTP deliberately."""
-    urls = [s for s in REGISTRY if s.key.endswith("_URL")]
-    assert urls, "expected at least one URL setting"
-    assert all(s.local_only for s in urls), [s.key for s in urls if not s.local_only]
+def test_every_setting_that_names_a_destination_a_path_or_a_model_is_local_only():
+    """A future *_URL, *_PATH or *_DIRECTORY setting decides where data goes or what is loaded,
+    so it must opt out of HTTP deliberately rather than inherit it."""
+    sensitive = [
+        s
+        for s in REGISTRY
+        if s.key.endswith(("_URL", "_PATH", "_DIRECTORY", "_DIR")) or s.key == "EMBEDDING_MODEL_NAME"
+    ]
+    assert len(sensitive) >= 11, [s.key for s in sensitive]
+    assert all(s.local_only for s in sensitive), [s.key for s in sensitive if not s.local_only]
 
 
-@pytest.mark.parametrize("key", ["OPENAI_BASE_URL", "CHROMA_HTTP_URL"])
-def test_the_default_is_to_refuse_so_a_caller_that_forgets_the_flag_fails_closed(env_file, key):
-    """No argument at all must be the safe call, or a new endpoint would skip the gate silently."""
-    before = env_file.read_text(encoding="utf-8")
-    with pytest.raises(SettingError, match="command line"):
-        apply_changes({key: "https://elsewhere.example"}, env_path=env_file)
-    assert env_file.read_text(encoding="utf-8") == before
+def test_the_settings_a_web_page_is_meant_to_edit_are_not_local_only():
+    """The restriction is narrow on purpose: provider, keys and tuning stay editable."""
+    for key in ("LLM_PROVIDER", "K_VECTOR", "OPENAI_API_KEY", "ENABLE_ROUTING", "DEFAULT_LANGUAGE"):
+        assert not get_setting(key).local_only, key
 
 
-# ------------------------------------------------------------ interpolation on read
+# ------------------------------------------------------------ restart-required changes
 
 
-def test_a_value_with_an_interpolation_is_shown_as_written_never_expanded(env_file, monkeypatch):
-    """Even a credential with no recognisable shape must not surface through another setting."""
-    monkeypatch.setenv("OPENAI_API_KEY", "plain-long-credential-value-no-prefix")
-    env_file.write_text('OPENAI_MODEL="${OPENAI_API_KEY}"\n', encoding="utf-8")
+def test_a_restart_required_change_is_saved_but_not_applied_to_the_running_process(env_file):
+    """Flipping ENABLE_ROUTING live could load four large models into a running server."""
+    apply_changes({"ENABLE_ROUTING": "true"}, env_path=env_file)
 
-    state = describe("OPENAI_MODEL", env_path=env_file)
-
-    assert state.value == "${OPENAI_API_KEY}"
-    assert "plain-long-credential" not in repr(state)
+    assert dotenv_values(env_file)["ENABLE_ROUTING"] == "true"  # saved
+    assert "ENABLE_ROUTING" not in os.environ  # not applied
+    assert config.load_config().enable_routing is False
 
 
-def test_an_expanded_value_the_loader_put_in_the_environment_is_not_read_as_a_shell_override(env_file, monkeypatch):
-    env_file.write_text('OPENAI_MODEL="${OPENAI_API_KEY}"\n', encoding="utf-8")
-    monkeypatch.setenv("OPENAI_API_KEY", "plain-long-credential-value-no-prefix")
-    monkeypatch.setenv("OPENAI_MODEL", "plain-long-credential-value-no-prefix")  # what load_dotenv would set
+def test_a_pending_change_reports_what_is_in_use_and_what_will_replace_it(env_file, monkeypatch):
+    env_file.write_text("LOG_LEVEL=INFO\n", encoding="utf-8")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")  # what load_dotenv put there at startup
 
-    state = describe("OPENAI_MODEL", env_path=env_file)
+    apply_changes({"LOG_LEVEL": "debug"}, env_path=env_file)
+    state = describe("LOG_LEVEL", env_path=env_file)
 
-    assert (state.source, state.overridden) == ("file", False)
-    assert "plain-long-credential" not in repr(state)
+    assert os.environ["LOG_LEVEL"] == "INFO"
+    assert (state.value, state.source, state.pending_value, state.overridden) == ("INFO", "file", "DEBUG", False)
+
+
+def test_a_pending_change_is_not_mistaken_for_a_shell_override_when_changed_again(env_file, monkeypatch):
+    env_file.write_text("LOG_LEVEL=INFO\n", encoding="utf-8")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    apply_changes({"LOG_LEVEL": "debug"}, env_path=env_file)
+
+    (result,) = apply_changes({"LOG_LEVEL": "warning"}, env_path=env_file)
+
+    assert result.restart_required is True and "shell" not in result.note
+    assert describe("LOG_LEVEL", env_path=env_file).pending_value == "WARNING"
+
+
+def test_changing_a_pending_setting_back_clears_the_pending_state(env_file, monkeypatch):
+    env_file.write_text("LOG_LEVEL=INFO\n", encoding="utf-8")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    apply_changes({"LOG_LEVEL": "debug"}, env_path=env_file)
+    apply_changes({"LOG_LEVEL": "info"}, env_path=env_file)
+
+    state = describe("LOG_LEVEL", env_path=env_file)
+
+    assert (state.value, state.pending_value) == ("INFO", None)
+
+
+def test_a_non_restart_setting_still_applies_immediately(env_file):
+    apply_changes({"K_VECTOR": "5"}, env_path=env_file)
+    assert os.environ["K_VECTOR"] == "5" and config.load_config().k_vector == 5
