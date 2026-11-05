@@ -151,8 +151,13 @@ questions to a server of their choosing, or point the model path at a file they 
 in with `printf '%s' "$KEY" | rag config set OPENAI_API_KEY`; do not put it on the command line,
 where it ends up in your shell history.
 
-**A running `rag serve`** reads its settings when it starts. Changing `.env` with `rag config`
-from another terminal does not reach it; restart the server.
+**The web page.** Settings in the web UI (served by `rag serve`) does the same thing with the same checks:
+every setting is grouped, shows where its value came from, and is marked when it needs a restart. Saving
+there applies the live settings to the running server immediately.
+
+**A running `rag serve`** reads `.env` when it starts. Changing it from another terminal with
+`rag config` does not reach a server that is already running; use the web page, or restart the server.
+The page says so when the server's value and the file disagree.
 
 A key is stored as given: it is not tried against the provider when you save it, so a wrong
 key shows up on the first question.

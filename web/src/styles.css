@@ -134,3 +134,38 @@ dl {
 dd {
   margin: 0;
 }
+
+details {
+  margin: 0.75rem 0;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.setting {
+  margin: 0.75rem 0 1rem;
+}
+
+.setting label {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+}
+
+.setting p {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+}
+
+[role='note'] {
+  border-left: 3px solid currentColor;
+  padding-left: 0.5rem;
+}
+
+select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem;
+}

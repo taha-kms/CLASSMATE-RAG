@@ -22,6 +22,18 @@ The consequence is that **the bind address is the entire security model**.
 because port-forwarding into a container needs it, and it prints a warning when
 given anything other than loopback. Do not put this on a network you share.
 
+## Host check
+
+On a loopback bind (the default), requests whose `Host` header is not `localhost`, `127.0.0.1` or `::1` get
+`400`. This turns away a web page that uses DNS rebinding to make your browser call the API as if it were
+the page's own origin: that page has to send its own hostname as `Host`. Open the UI as
+`http://localhost:8080` or `http://127.0.0.1:8080`; `http://0.0.0.0:8080` is refused on purpose.
+
+With `--host` set to anything else the names people use are not knowable, so the check is off and the
+warning above applies. Behind a Docker port-forward that means no check; keep the published port on
+`127.0.0.1`. This does not protect against another user on the same machine, who can reach loopback
+legitimately.
+
 ## Endpoints
 
 | Method | Path | Does |
@@ -34,6 +46,8 @@ given anything other than loopback. Do not put this on a network you share.
 | `DELETE` | `/chunks` | Delete by ids, path or filter. Dry run by default. |
 | `GET` | `/stats` | Index health, as `rag stats`. |
 | `GET` | `/reconcile` | Chunks stranded in one store, as `rag reconcile`. |
+| `GET` | `/settings` | Every setting, its effective value and where that came from. Credentials are masked. |
+| `PUT` | `/settings` | Change settings together, as `rag config set`. All or nothing. |
 | `POST` | `/admin/vacuum` | Housekeeping. Fast enough to answer inline. |
 | `POST` | `/admin/dump`, `/admin/restore`, `/admin/rebuild` | Start a job, return `202` and its id. |
 | `GET` | `/admin/jobs`, `/admin/jobs/{id}` | Job state and result. |
@@ -125,6 +139,49 @@ curl -X DELETE http://127.0.0.1:8080/chunks \
   -H 'content-type: application/json' \
   -d '{"course": "Maths", "dry_run": false}'
 ```
+
+### Settings
+
+`GET /settings` lists every setting in the same registry `rag config list` uses:
+
+```json
+{"key": "K_VECTOR", "kind": "int", "group": "Retrieval", "value": "8", "source": "file",
+ "default": "8", "minimum": 1, "maximum": 100, "restart_required": false,
+ "overridden": false, "file_value": null, "choices": [], "description": "..."}
+```
+
+`source` is `environment`, `file`, `stored` (a credential in the credential store), `default` or
+`unset`. When `overridden` is true the shell holds a different value than `.env`, so saving to the
+file changes nothing until that variable is unset; `file_value` is what the file says.
+
+`PUT /settings` takes `{"changes": {"K_VECTOR": 12, "OPENAI_API_KEY": "..."}}`. A `null` value removes
+a setting. Every change is checked first and nothing is written if any is invalid (`422`, with the
+reason in `detail`). Each result says whether it `applied` and whether it needs a restart, and
+carries a `note` when it did not take effect:
+
+```json
+{"changes": [{"key": "ENABLE_ROUTING", "action": "set", "applied": false,
+              "restart_required": true, "note": "Takes effect after a restart."}]}
+```
+
+Settings that decide where credentials and text are sent, or what gets loaded, are read-only over HTTP
+(`local_only: true` in the listing; `PUT` answers `422`): `OPENAI_BASE_URL`, `CHROMA_HTTP_URL`,
+`EMBEDDING_MODEL_NAME`, every `*_MODEL_PATH`, and the index directories. Changing them needs `rag config set` on
+this machine. `POST /ingest` keeps an upload under `data/uploads/`, so a writable model path would let a caller
+make the server load a file they sent.
+
+A setting marked `restart_required` is saved to `.env` but **not applied to the running server**, which could
+otherwise load several large models mid-session. The listing keeps `value` as what the server is using and
+puts the saved value in `pending_value` until it restarts. URL-valued settings are returned rebuilt from scheme,
+host, port and path only (no userinfo, query or fragment), or hidden if they cannot be parsed.
+
+Credentials are write-only: they are accepted here and stored outside `.env`, and read back only as
+a masked form ending in the last four characters.
+
+**This endpoint widens what an unauthenticated API can do.** Anyone who can reach the port can set
+`OPENAI_BASE_URL` and `LLM_PROVIDER` and so redirect later questions, and the course text sent with
+them, to a server of their choosing. That is the same "the bind address is the whole security model"
+rule as above, now with more behind it.
 
 ## Serving the frontend
 

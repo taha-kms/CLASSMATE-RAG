@@ -11,6 +11,8 @@ import type {
   Job,
   PreviewHit,
   ReconcileReport,
+  SettingChange,
+  SettingInfo,
   Stage,
 } from './types';
 
@@ -198,3 +200,10 @@ export async function getJob(id: string): Promise<Job | null> {
     throw caught;
   }
 }
+
+export const getSettings = async () =>
+  (await json<{ settings: SettingInfo[] }>('/settings')).settings;
+
+/** `null` removes a setting. All changes are validated first; none apply if one is invalid. */
+export const putSettings = async (changes: Record<string, string | null>) =>
+  (await json<{ changes: SettingChange[] }>('/settings', jsonBody('PUT', { changes }))).changes;

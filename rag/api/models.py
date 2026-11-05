@@ -81,3 +81,13 @@ class JobResponse(BaseModel):
     finished_at: str | None = None
     result: dict[str, Any] | None = None
     error: str | None = None
+
+
+class SettingsUpdate(BaseModel):
+    """Changes to apply together. ``null`` removes a setting, restoring its default.
+
+    Values may arrive as JSON numbers or booleans; they are validated as text
+    by rag.settings, the same as a value typed into ``rag config set``.
+    """
+
+    changes: dict[str, str | int | float | bool | None] = Field(min_length=1)

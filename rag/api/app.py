@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+from collections.abc import Iterable
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Annotated, Any
@@ -25,6 +27,7 @@ from typing import Annotated, Any
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from rag.api.hosts import HostGuard
 from rag.api.jobs import JobRegistry
 from rag.api.models import (
     AskRequest,
@@ -34,6 +37,7 @@ from rag.api.models import (
     PreviewRequest,
     RebuildRequest,
     RestoreRequest,
+    SettingsUpdate,
 )
 from rag.bootstrap import project_root
 
@@ -71,12 +75,19 @@ def _sse(event: str, payload: Any) -> str:
     return f"event: {event}\ndata: {json.dumps(_to_jsonable(payload), ensure_ascii=False)}\n\n"
 
 
-def create_app() -> FastAPI:
+def create_app(allowed_hosts: Iterable[str] | None = None) -> FastAPI:
+    """Build the app. ``allowed_hosts`` turns on the Host-header check (see rag.api.hosts).
+
+    Left unset, nothing is checked: the check only makes sense when the server
+    is bound to loopback, which is `rag serve`'s default and the caller's call.
+    """
     app = FastAPI(
         title="CLASSMATE-RAG",
         description="Local API over your own course materials. No authentication: bind to localhost only.",
         version="1.0.0",
     )
+    if allowed_hosts is not None:
+        app.add_middleware(HostGuard, allowed=allowed_hosts)
     jobs = JobRegistry()
 
     # ---------------------------------------------------------------- ask
@@ -359,6 +370,90 @@ def create_app() -> FastAPI:
         if job is None:
             raise HTTPException(status_code=404, detail=f"No job with id {job_id!r}")
         return job.as_dict()
+
+    # ----------------------------------------------------------- settings
+
+    @app.get("/settings")
+    def get_settings() -> dict[str, Any]:
+        """Every setting with its effective value and where that value came from.
+
+        Credentials are masked: this endpoint can say that a key is set, and
+        its last four characters, but never the key.
+        """
+        from rag import settings
+        from rag.secrets import redact, safe_url
+
+        def shown(key: str, text: str | None) -> str | None:
+            if text is None:
+                return None
+            # Scrub exact credential values first, while they are still intact.
+            scrubbed = redact(text)
+            if key.endswith("_URL"):
+                # A URL-valued setting (a proxy, a Chroma server) can carry
+                # user:password@ or a token in the query. Rebuild it from its
+                # parts rather than pattern-matching the text, and hide the
+                # whole value if it cannot be parsed.
+                return safe_url(scrubbed)
+            # Anything else: the validators refuse ${...}, and .env is read
+            # without expanding it, so this is a backstop for what a
+            # hand-edited file might hold.
+            return re.sub(r"(://)\S*@", r"\1", scrubbed)
+
+        return {
+            "settings": [
+                {
+                    "key": st.setting.key,
+                    "kind": st.setting.kind,
+                    "group": st.setting.group,
+                    "description": st.setting.description,
+                    "default": st.setting.default,
+                    "choices": list(st.setting.choices),
+                    "minimum": st.setting.minimum,
+                    "maximum": st.setting.maximum,
+                    "restart_required": st.setting.restart,
+                    "local_only": st.setting.local_only,
+                    "value": st.value if st.setting.kind == "secret" else shown(st.setting.key, st.value),
+                    "source": st.source,
+                    "overridden": st.overridden,
+                    "file_value": shown(st.setting.key, st.file_value),
+                    "pending_value": shown(st.setting.key, st.pending_value),
+                }
+                for st in settings.describe_all()
+            ]
+        }
+
+    @app.put("/settings")
+    def put_settings(req: SettingsUpdate) -> dict[str, Any]:
+        """Validate every change, then apply them together. Nothing is written if one is invalid."""
+        from rag import settings
+
+        def as_text(value: str | int | float | bool | None) -> str | None:
+            if isinstance(value, bool):  # before int: bool is an int in Python
+                return "true" if value else "false"
+            return None if value is None else str(value)
+
+        try:
+            results = settings.apply_changes({k: as_text(v) for k, v in req.changes.items()})
+        except settings.SettingError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+        except OSError as e:
+            # The reason (a path, a permission) stays in the log, like the other endpoints.
+            log.exception("could not write settings")
+            raise HTTPException(
+                status_code=500, detail="The settings file could not be written. See the server log."
+            ) from e
+        return {
+            "changes": [
+                {
+                    "key": r.key,
+                    "action": r.action,
+                    "applied": r.applied,
+                    "restart_required": r.restart_required,
+                    "note": r.note,
+                }
+                for r in results
+            ]
+        }
 
     # ----------------------------------------------------------- frontend
 

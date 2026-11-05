@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, getJob, getStats, reconcile, startJob, vacuum } from './api';
+import ServerSettings from './ServerSettings';
 import type { Knobs } from './settings-store';
 import type { IndexStats, Job, ReconcileReport } from './types';
 
@@ -72,7 +73,7 @@ export default function Settings({
 
   return (
     <section aria-label="Settings">
-      <h2>Retrieval</h2>
+      <h2>Per-question retrieval</h2>
       <div className="filters">
         <label>
           Chunks per answer (top_k)
@@ -97,6 +98,9 @@ export default function Settings({
         </label>
       </div>
       <p className="muted">Kept in this browser and sent with each question.</p>
+
+      <h2>Server settings</h2>
+      <ServerSettings />
 
       <h2>Index</h2>
       {error && <p role="alert">{error}</p>}
@@ -161,12 +165,6 @@ export default function Settings({
         fieldLabel="Embedding model"
         warning="Re-embeds every chunk. This takes minutes."
       />
-
-      <h2>Model and paths</h2>
-      <p className="muted">
-        The model profile and storage paths are set in the environment or with <code>rag</code> on
-        the command line. The API does not expose them yet.
-      </p>
     </section>
   );
 }
