@@ -34,6 +34,8 @@ given anything other than loopback. Do not put this on a network you share.
 | `DELETE` | `/chunks` | Delete by ids, path or filter. Dry run by default. |
 | `GET` | `/stats` | Index health, as `rag stats`. |
 | `GET` | `/reconcile` | Chunks stranded in one store, as `rag reconcile`. |
+| `GET` | `/settings` | Every setting, its effective value and where that came from. Credentials are masked. |
+| `PUT` | `/settings` | Change settings together, as `rag config set`. All or nothing. |
 | `POST` | `/admin/vacuum` | Housekeeping. Fast enough to answer inline. |
 | `POST` | `/admin/dump`, `/admin/restore`, `/admin/rebuild` | Start a job, return `202` and its id. |
 | `GET` | `/admin/jobs`, `/admin/jobs/{id}` | Job state and result. |
@@ -125,6 +127,43 @@ curl -X DELETE http://127.0.0.1:8080/chunks \
   -H 'content-type: application/json' \
   -d '{"course": "Maths", "dry_run": false}'
 ```
+
+### Settings
+
+`GET /settings` lists every setting in the same registry `rag config list` uses:
+
+```json
+{"key": "K_VECTOR", "kind": "int", "group": "Retrieval", "value": "8", "source": "file",
+ "default": "8", "minimum": 1, "maximum": 100, "restart_required": false,
+ "overridden": false, "file_value": null, "choices": [], "description": "..."}
+```
+
+`source` is `environment`, `file`, `stored` (a credential in the credential store), `default` or
+`unset`. When `overridden` is true the shell holds a different value than `.env`, so saving to the
+file changes nothing until that variable is unset; `file_value` is what the file says.
+
+`PUT /settings` takes `{"changes": {"K_VECTOR": 12, "OPENAI_API_KEY": "..."}}`. A `null` value removes
+a setting. Every change is checked first and nothing is written if any is invalid (`422`, with the
+reason in `detail`). Each result says whether it `applied` and whether it needs a restart, and
+carries a `note` when it did not take effect:
+
+```json
+{"changes": [{"key": "ENABLE_ROUTING", "action": "set", "applied": false,
+              "restart_required": true, "note": "Takes effect after a restart."}]}
+```
+
+`OPENAI_BASE_URL` and `CHROMA_HTTP_URL` are read-only over HTTP (`local_only: true` in the listing; `PUT` answers
+`422`). They decide where credentials and corpus text are sent, so changing them needs `rag config set` on
+this machine.
+
+Credentials are write-only: they are accepted here and stored outside `.env`, and read back only as
+a masked form ending in the last four characters.
+
+**This endpoint widens what an unauthenticated API can do.** Anyone who can reach the port can set
+`OPENAI_BASE_URL` and `LLM_PROVIDER` and so redirect later questions, and the course text sent with
+them, to a server of their choosing. That is the same "the bind address is the whole security model"
+rule as above, now with more behind it. A web page you visit can also reach the port by DNS
+rebinding; closing that is tracked in #142.
 
 ## Serving the frontend
 

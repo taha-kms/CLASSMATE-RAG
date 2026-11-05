@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Annotated, Any
@@ -34,6 +35,7 @@ from rag.api.models import (
     PreviewRequest,
     RebuildRequest,
     RestoreRequest,
+    SettingsUpdate,
 )
 from rag.bootstrap import project_root
 
@@ -359,6 +361,91 @@ def create_app() -> FastAPI:
         if job is None:
             raise HTTPException(status_code=404, detail=f"No job with id {job_id!r}")
         return job.as_dict()
+
+    # ----------------------------------------------------------- settings
+
+    @app.get("/settings")
+    def get_settings() -> dict[str, Any]:
+        """Every setting with its effective value and where that value came from.
+
+        Credentials are masked: this endpoint can say that a key is set, and
+        its last four characters, but never the key.
+        """
+        from rag import settings
+        from rag.secrets import redact
+
+        def shown(text: str | None) -> str | None:
+            # A backstop for non-credential fields. The setting validators
+            # refuse ${...} so this API cannot create an interpolated value,
+            # but a hand-edited .env can hold one, and python-dotenv expands it
+            # from the environment. Anything key-shaped is masked rather than
+            # trusting that nothing sensitive got in.
+            if text is None:
+                return None
+            # Scrub exact credential values first, while they are still intact.
+            scrubbed = redact(text)
+            # user:password@ in a URL-valued setting (a proxy, a Chroma server)
+            # is a credential the listing has no reason to return. Strip
+            # through the LAST '@': a password can itself contain '@' or an
+            # unencoded '/', and stopping at the first of either would leave
+            # part of it behind. A path containing '@' loses its prefix too,
+            # which is the safe direction to be wrong in.
+            return re.sub(r"(://)\S*@", r"\1", scrubbed)
+
+        return {
+            "settings": [
+                {
+                    "key": st.setting.key,
+                    "kind": st.setting.kind,
+                    "group": st.setting.group,
+                    "description": st.setting.description,
+                    "default": st.setting.default,
+                    "choices": list(st.setting.choices),
+                    "minimum": st.setting.minimum,
+                    "maximum": st.setting.maximum,
+                    "restart_required": st.setting.restart,
+                    "local_only": st.setting.local_only,
+                    "value": st.value if st.setting.kind == "secret" else shown(st.value),
+                    "source": st.source,
+                    "overridden": st.overridden,
+                    "file_value": shown(st.file_value),
+                }
+                for st in settings.describe_all()
+            ]
+        }
+
+    @app.put("/settings")
+    def put_settings(req: SettingsUpdate) -> dict[str, Any]:
+        """Validate every change, then apply them together. Nothing is written if one is invalid."""
+        from rag import settings
+
+        def as_text(value: str | int | float | bool | None) -> str | None:
+            if isinstance(value, bool):  # before int: bool is an int in Python
+                return "true" if value else "false"
+            return None if value is None else str(value)
+
+        try:
+            results = settings.apply_changes({k: as_text(v) for k, v in req.changes.items()})
+        except settings.SettingError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+        except OSError as e:
+            # The reason (a path, a permission) stays in the log, like the other endpoints.
+            log.exception("could not write settings")
+            raise HTTPException(
+                status_code=500, detail="The settings file could not be written. See the server log."
+            ) from e
+        return {
+            "changes": [
+                {
+                    "key": r.key,
+                    "action": r.action,
+                    "applied": r.applied,
+                    "restart_required": r.restart_required,
+                    "note": r.note,
+                }
+                for r in results
+            ]
+        }
 
     # ----------------------------------------------------------- frontend
 

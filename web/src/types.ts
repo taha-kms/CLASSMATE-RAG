@@ -114,3 +114,33 @@ export interface IngestMeta {
   semester?: string;
   tags?: string;
 }
+
+export type SettingKind = 'str' | 'int' | 'float' | 'bool' | 'choice' | 'secret';
+
+export interface SettingInfo {
+  key: string;
+  kind: SettingKind;
+  group: string;
+  description: string;
+  default: string;
+  choices: string[];
+  minimum: number | null;
+  maximum: number | null;
+  restart_required: boolean;
+  /** Can only be changed with `rag config set` on this machine, not over HTTP. */
+  local_only: boolean;
+  /** Effective value; masked for credentials, empty when unset. */
+  value: string;
+  source: 'environment' | 'file' | 'default' | 'stored' | 'unset';
+  /** The shell holds a different value than .env, so saving to the file changes nothing. */
+  overridden: boolean;
+  file_value: string | null;
+}
+
+export interface SettingChange {
+  key: string;
+  action: 'set' | 'unset';
+  applied: boolean;
+  restart_required: boolean;
+  note: string;
+}

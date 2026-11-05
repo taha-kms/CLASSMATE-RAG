@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { json } from './helpers';
+import { json, SETTING, SETTINGS } from './helpers';
 
 const CHUNK = (id: string, course = 'Maths') => ({
   id,
@@ -11,6 +11,7 @@ test.describe('navigation', () => {
   test('the view is in the hash, so a reload keeps it and never hits an API route', async ({
     page,
   }) => {
+    await page.route('**/settings', (route) => json(route, { settings: SETTINGS }));
     await page.route('**/stats', (route) =>
       json(route, {
         vector_count: 2,
@@ -182,6 +183,13 @@ test.describe('settings', () => {
     bm25: { persist_dir: '/i/bm25', disk_bytes: 2048, count: 4 },
   };
 
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/settings', (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      return json(route, { settings: SETTINGS });
+    });
+  });
+
   test('repair is offered only after a dry run finds drift', async ({ page }) => {
     const applied: string[] = [];
     await page.route('**/stats', (route) => json(route, STATS));
@@ -255,5 +263,190 @@ test.describe('settings', () => {
 
     await expect(page.getByRole('alert')).toBeVisible();
     expect(body).toMatchObject({ question: 'q', top_k: 3, hybrid: false });
+  });
+});
+
+test.describe('server settings', () => {
+  let puts: Array<Record<string, unknown>>;
+
+  test.beforeEach(async ({ page }) => {
+    puts = [];
+    await page.route('**/stats', (route) =>
+      json(route, {
+        vector_count: 2,
+        consistent: true,
+        collection: 'c',
+        embedding_model: 'e5',
+        chroma: { persist_dir: '/i/chroma', disk_bytes: 1048576 },
+        bm25: { persist_dir: '/i/bm25', disk_bytes: 2048, count: 2 },
+      }),
+    );
+  });
+
+  test('groups settings and says where each value came from', async ({ page }) => {
+    await page.route('**/settings', (route) => json(route, { settings: SETTINGS }));
+
+    await page.goto('/#/settings');
+
+    const row = page.getByTestId('setting-K_VECTOR');
+    await expect(row).toContainText('Candidates fetched');
+    await expect(row).toContainText('set in .env');
+    await expect(page.getByTestId('setting-USE_HYBRID')).toContainText('default');
+    await expect(page.getByTestId('setting-ENABLE_ROUTING')).toContainText(
+      'Needs a restart to take effect',
+    );
+  });
+
+  test('sends only the fields that changed and reports what applied', async ({ page }) => {
+    await page.route('**/settings', (route) => {
+      if (route.request().method() === 'GET') return json(route, { settings: SETTINGS });
+      puts.push(route.request().postDataJSON() as Record<string, unknown>);
+      return json(route, {
+        changes: [
+          { key: 'K_VECTOR', action: 'set', applied: true, restart_required: false, note: '' },
+          {
+            key: 'ENABLE_ROUTING',
+            action: 'set',
+            applied: false,
+            restart_required: true,
+            note: 'Takes effect after a restart.',
+          },
+        ],
+      });
+    });
+
+    await page.goto('/#/settings');
+    const save = page.getByRole('button', { name: 'Save' });
+    await expect(save).toBeDisabled();
+
+    await page.locator('summary', { hasText: 'Answers and models' }).click();
+    await page.locator('#setting-K_VECTOR').fill('12');
+    await page.locator('#setting-ENABLE_ROUTING').check();
+    await page.getByRole('button', { name: 'Save 2 changes' }).click();
+
+    await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).toContainText(
+      'ENABLE_ROUTING: updated — Takes effect after a restart.',
+    );
+    await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).toContainText(
+      'K_VECTOR: updated — in effect now',
+    );
+    expect(puts).toEqual([{ changes: { K_VECTOR: '12', ENABLE_ROUTING: 'true' } }]);
+  });
+
+  test('a rejected batch shows the reason and keeps what was typed', async ({ page }) => {
+    await page.route('**/settings', (route) => {
+      if (route.request().method() === 'GET') return json(route, { settings: SETTINGS });
+      return json(route, { detail: 'CHUNK_OVERLAP: must be smaller than CHUNK_SIZE (1000).' }, 422);
+    });
+
+    await page.goto('/#/settings');
+    await page.locator('#setting-K_VECTOR').fill('12');
+    await page.getByRole('button', { name: 'Save 1 change' }).click();
+
+    await expect(page.getByRole('alert')).toContainText('must be smaller than CHUNK_SIZE');
+    await expect(page.locator('#setting-K_VECTOR')).toHaveValue('12');
+  });
+
+  test('a credential field never shows the key and is sent only when typed', async ({ page }) => {
+    await page.route('**/settings', (route) => {
+      if (route.request().method() === 'GET') return json(route, { settings: SETTINGS });
+      puts.push(route.request().postDataJSON() as Record<string, unknown>);
+      return json(route, {
+        changes: [
+          {
+            key: 'OPENAI_API_KEY',
+            action: 'set',
+            applied: true,
+            restart_required: false,
+            note: '',
+          },
+        ],
+      });
+    });
+
+    await page.goto('/#/settings');
+    await page.locator('summary', { hasText: 'Credentials' }).click();
+    const field = page.locator('#setting-OPENAI_API_KEY');
+    await expect(field).toHaveAttribute('type', 'password');
+    await expect(field).toHaveValue('');
+    await expect(page.getByTestId('setting-OPENAI_API_KEY')).toContainText('Configured (…1234)');
+
+    await field.fill('sk-fake-new-key-0000');
+    await page.getByRole('button', { name: 'Save 1 change' }).click();
+
+    await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).toBeVisible();
+    expect(puts).toEqual([{ changes: { OPENAI_API_KEY: 'sk-fake-new-key-0000' } }]);
+    await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).not.toContainText(
+      'sk-fake-new',
+    );
+    await expect(field).toHaveValue('');
+  });
+
+  test('a stored credential can be removed', async ({ page }) => {
+    await page.route('**/settings', (route) => {
+      if (route.request().method() === 'GET') return json(route, { settings: SETTINGS });
+      puts.push(route.request().postDataJSON() as Record<string, unknown>);
+      return json(route, {
+        changes: [
+          {
+            key: 'OPENAI_API_KEY',
+            action: 'unset',
+            applied: true,
+            restart_required: false,
+            note: '',
+          },
+        ],
+      });
+    });
+
+    await page.goto('/#/settings');
+    await page.locator('summary', { hasText: 'Credentials' }).click();
+    await page
+      .getByTestId('setting-OPENAI_API_KEY')
+      .getByRole('button', { name: 'Remove it' })
+      .click();
+    await page.getByRole('button', { name: 'Save 1 change' }).click();
+
+    await expect(page.getByRole('status').filter({ hasText: 'Saved.' })).toContainText('removed');
+    expect(puts).toEqual([{ changes: { OPENAI_API_KEY: null } }]);
+  });
+
+  test('warns when the shell overrides the value in .env', async ({ page }) => {
+    await page.route('**/settings', (route) =>
+      json(route, {
+        settings: [
+          SETTING({ value: '30', source: 'environment', overridden: true, file_value: '8' }),
+        ],
+      }),
+    );
+
+    await page.goto('/#/settings');
+
+    const note = page.getByTestId('setting-K_VECTOR').getByRole('note');
+    await expect(note).toContainText('The server is using 30');
+    await expect(note).toContainText('.env says 8');
+    await expect(note).toContainText('exported in your shell, or a change made outside this page');
+  });
+
+  test('says so when the API cannot be reached', async ({ page }) => {
+    await page.route('**/settings', (route) => route.abort('connectionrefused'));
+
+    await page.goto('/#/settings');
+
+    await expect(page.getByRole('alert').first()).toContainText('Could not reach the local API');
+  });
+
+  test('a setting that decides where data goes is read-only and names the command', async ({
+    page,
+  }) => {
+    await page.route('**/settings', (route) => json(route, { settings: SETTINGS }));
+
+    await page.goto('/#/settings');
+
+    const field = page.locator('#setting-OPENAI_BASE_URL');
+    await expect(field).toHaveAttribute('readonly', '');
+    await expect(page.getByTestId('setting-OPENAI_BASE_URL')).toContainText(
+      'rag config set OPENAI_BASE_URL=VALUE',
+    );
   });
 });
