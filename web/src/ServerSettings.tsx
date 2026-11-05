@@ -199,6 +199,12 @@ export default function ServerSettings() {
                   {setting.kind !== 'secret' && ` (${SOURCE_LABEL[setting.source]})`}
                   {setting.restart_required && ' Needs a restart to take effect.'}
                 </p>
+                {setting.pending_value !== null && (
+                  <p role="note" data-testid={`pending-${setting.key}`}>
+                    Saved: <code>{setting.pending_value || '(default)'}</code>. The server is still
+                    using <code>{setting.value}</code> and will switch after you restart it.
+                  </p>
+                )}
                 {setting.overridden && (
                   <p role="note">
                     The server is using <code>{setting.value}</code>, from its environment, while{' '}

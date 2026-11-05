@@ -135,6 +135,8 @@ export interface SettingInfo {
   /** The shell holds a different value than .env, so saving to the file changes nothing. */
   overridden: boolean;
   file_value: string | null;
+  /** Saved to .env but waiting for a restart; `value` is still what the server is using. */
+  pending_value: string | null;
 }
 
 export interface SettingChange {

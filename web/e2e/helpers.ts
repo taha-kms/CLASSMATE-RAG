@@ -28,6 +28,7 @@ export const SETTING = (over: Record<string, unknown> = {}) => ({
   source: 'file',
   overridden: false,
   file_value: null,
+  pending_value: null,
   ...over,
 });
 

@@ -516,7 +516,14 @@ def cmd_serve(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
-    uvicorn.run(create_app(), host=args.host, port=args.port, log_level=args.log_level)
+    # On loopback, refuse requests whose Host header names anything else: that is
+    # what a DNS-rebinding page sends (#142). On any other bind address the names
+    # people legitimately use are not knowable here, and the warning above applies.
+    from rag.api.hosts import LOOPBACK_HOSTS
+
+    loopback_bind = args.host in ("127.0.0.1", "localhost", "::1")
+    app = create_app(allowed_hosts=LOOPBACK_HOSTS if loopback_bind else None)
+    uvicorn.run(app, host=args.host, port=args.port, log_level=args.log_level)
     return 0
 
 

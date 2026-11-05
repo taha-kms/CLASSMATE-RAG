@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Annotated, Any
@@ -26,6 +27,7 @@ from typing import Annotated, Any
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from rag.api.hosts import HostGuard
 from rag.api.jobs import JobRegistry
 from rag.api.models import (
     AskRequest,
@@ -73,12 +75,19 @@ def _sse(event: str, payload: Any) -> str:
     return f"event: {event}\ndata: {json.dumps(_to_jsonable(payload), ensure_ascii=False)}\n\n"
 
 
-def create_app() -> FastAPI:
+def create_app(allowed_hosts: Iterable[str] | None = None) -> FastAPI:
+    """Build the app. ``allowed_hosts`` turns on the Host-header check (see rag.api.hosts).
+
+    Left unset, nothing is checked: the check only makes sense when the server
+    is bound to loopback, which is `rag serve`'s default and the caller's call.
+    """
     app = FastAPI(
         title="CLASSMATE-RAG",
         description="Local API over your own course materials. No authentication: bind to localhost only.",
         version="1.0.0",
     )
+    if allowed_hosts is not None:
+        app.add_middleware(HostGuard, allowed=allowed_hosts)
     jobs = JobRegistry()
 
     # ---------------------------------------------------------------- ask
@@ -372,24 +381,22 @@ def create_app() -> FastAPI:
         its last four characters, but never the key.
         """
         from rag import settings
-        from rag.secrets import redact
+        from rag.secrets import redact, safe_url
 
-        def shown(text: str | None) -> str | None:
-            # A backstop for non-credential fields. The setting validators
-            # refuse ${...} so this API cannot create an interpolated value,
-            # but a hand-edited .env can hold one, and python-dotenv expands it
-            # from the environment. Anything key-shaped is masked rather than
-            # trusting that nothing sensitive got in.
+        def shown(key: str, text: str | None) -> str | None:
             if text is None:
                 return None
             # Scrub exact credential values first, while they are still intact.
             scrubbed = redact(text)
-            # user:password@ in a URL-valued setting (a proxy, a Chroma server)
-            # is a credential the listing has no reason to return. Strip
-            # through the LAST '@': a password can itself contain '@' or an
-            # unencoded '/', and stopping at the first of either would leave
-            # part of it behind. A path containing '@' loses its prefix too,
-            # which is the safe direction to be wrong in.
+            if key.endswith("_URL"):
+                # A URL-valued setting (a proxy, a Chroma server) can carry
+                # user:password@ or a token in the query. Rebuild it from its
+                # parts rather than pattern-matching the text, and hide the
+                # whole value if it cannot be parsed.
+                return safe_url(scrubbed)
+            # Anything else: the validators refuse ${...}, and .env is read
+            # without expanding it, so this is a backstop for what a
+            # hand-edited file might hold.
             return re.sub(r"(://)\S*@", r"\1", scrubbed)
 
         return {
@@ -405,10 +412,11 @@ def create_app() -> FastAPI:
                     "maximum": st.setting.maximum,
                     "restart_required": st.setting.restart,
                     "local_only": st.setting.local_only,
-                    "value": st.value if st.setting.kind == "secret" else shown(st.value),
+                    "value": st.value if st.setting.kind == "secret" else shown(st.setting.key, st.value),
                     "source": st.source,
                     "overridden": st.overridden,
-                    "file_value": shown(st.file_value),
+                    "file_value": shown(st.setting.key, st.file_value),
+                    "pending_value": shown(st.setting.key, st.pending_value),
                 }
                 for st in settings.describe_all()
             ]

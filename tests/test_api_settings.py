@@ -24,6 +24,7 @@ def isolated(monkeypatch, tmp_path):
     env.write_text("# mine\nK_VECTOR=8\n", encoding="utf-8")
     monkeypatch.setattr(settings, "env_file_path", lambda: env)
     monkeypatch.setattr(secrets, "secrets_path", lambda: tmp_path / ".secrets.env")
+    monkeypatch.setattr(settings, "_PENDING", {})
     monkeypatch.setattr(config, "load_dotenv", lambda *a, **k: False)
     monkeypatch.setattr(config, "__CONFIG_SINGLETON", getattr(config, "__CONFIG_SINGLETON"), raising=False)
     for s in REGISTRY:
@@ -192,18 +193,55 @@ def test_an_exported_credential_with_no_recognisable_shape_cannot_surface_throug
 
 
 @pytest.mark.parametrize(
-    "url",
+    ("url", "shown"),
     [
-        "https://someone:p@ssword-fake@proxy.example/v1",  # '@' in the password
-        "https://someone:pa/ssword-fake@proxy.example/v1",  # unencoded '/' in the password
-        "https://someone:p@ss/wo@rd-fake@proxy.example/v1",  # both
+        ("https://someone:p@ssword-fake@proxy.example/v1", "https://proxy.example/v1"),  # '@' in the password
+        ("https://someone:pa/ssword-fake@proxy.example/v1", "(hidden"),  # '/' makes it unparseable
+        ("https://someone:p@ss/wo@rd-fake@proxy.example/v1", "(hidden"),  # both
+        ("https://proxy.example/v1?api_key=ssword-fake", "https://proxy.example/v1"),  # token in the query
     ],
 )
-def test_no_part_of_a_password_survives_even_when_it_contains_at_or_slash(client, isolated, url):
+def test_no_part_of_a_credential_survives_in_a_url_setting(client, isolated, url, shown):
     isolated.write_text(f"OPENAI_BASE_URL={url}\n", encoding="utf-8")
 
     body = client.get("/settings").text
 
     for fragment in ("ssword", "ss/wo", "wo@rd", "someone"):
         assert fragment not in body, fragment
-    assert "https://proxy.example/v1" in body
+    assert shown in body  # the useful part is shown when it can be told apart, otherwise the value is hidden
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "EMBEDDING_MODEL_NAME",
+        "LLM_MODEL_PATH",
+        "ROUTE_CODE_MODEL_PATH",
+        "BM25_DIRECTORY",
+        "CHROMA_PERSIST_DIRECTORY",
+        "EMB_CACHE_DIR",
+    ],
+)
+def test_settings_that_decide_what_is_loaded_or_where_it_is_stored_cannot_be_written_over_http(client, isolated, key):
+    """POST /ingest keeps an upload under data/uploads/, so a writable model path would load it."""
+    before = isolated.read_text(encoding="utf-8")
+    r = client.put("/settings", json={"changes": {key: "data/uploads/anything"}})
+
+    assert r.status_code == 422 and f"rag config set {key}" in r.json()["detail"]
+    assert isolated.read_text(encoding="utf-8") == before
+
+
+def test_provider_keys_and_tuning_remain_editable_over_http(client):
+    changes = {"LLM_PROVIDER": "openai", "OPENAI_API_KEY": "sk-fake-fake-fake-fake-1234", "K_VECTOR": 5}
+    assert client.put("/settings", json={"changes": changes}).status_code == 200
+
+
+def test_a_pending_restart_change_is_reported_next_to_the_value_in_use(client, isolated, monkeypatch):
+    isolated.write_text("LOG_LEVEL=INFO\n", encoding="utf-8")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+
+    client.put("/settings", json={"changes": {"LOG_LEVEL": "debug"}})
+    log = by_key(client)["LOG_LEVEL"]
+
+    assert (log["value"], log["pending_value"], log["restart_required"]) == ("INFO", "DEBUG", True)
+    assert by_key(client)["K_VECTOR"]["pending_value"] is None

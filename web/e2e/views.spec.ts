@@ -449,4 +449,31 @@ test.describe('server settings', () => {
       'rag config set OPENAI_BASE_URL=VALUE',
     );
   });
+
+  test('a restart-required change is shown next to the value still in use', async ({ page }) => {
+    await page.route('**/settings', (route) =>
+      json(route, {
+        settings: [
+          SETTING({
+            key: 'LOG_LEVEL',
+            kind: 'choice',
+            choices: ['INFO', 'DEBUG'],
+            default: 'INFO',
+            value: 'INFO',
+            restart_required: true,
+            pending_value: 'DEBUG',
+            minimum: null,
+            maximum: null,
+          }),
+        ],
+      }),
+    );
+
+    await page.goto('/#/settings');
+
+    const note = page.getByTestId('pending-LOG_LEVEL');
+    await expect(note).toContainText('Saved: DEBUG');
+    await expect(note).toContainText('still using INFO');
+    await expect(note).toContainText('after you restart it');
+  });
 });
