@@ -45,11 +45,13 @@ so the CLI finds the same corpus from anywhere.
 | `CHROMA_PERSIST_DIRECTORY` | Where the embedded Chroma database lives | `./indexes/chroma` |
 | `CHROMA_COLLECTION_NAME` | Collection name inside Chroma | `classmate_rag` |
 | `CHROMA_HTTP_URL` | Chroma server endpoint. Unset means embedded mode | unset |
+| `CHROMA_BIND_HOST` | Interface docker-compose publishes Chroma on. The app only reads it to warn when it is not loopback | `127.0.0.1` |
 | `BM25_DIRECTORY` | Where the BM25 lexical index lives | `./indexes/bm25` |
 | `EMB_CACHE_DIR` | Where cached embeddings are stored | `./indexes/emb_cache` |
 
-`CHROMA_BIND_HOST` and `CHROMA_HOST_PORT` are read by docker-compose rather
-than by the application. See "Changing the Chroma port" below.
+`CHROMA_BIND_HOST` and `CHROMA_HOST_PORT` are applied by docker-compose. The
+application reads `CHROMA_BIND_HOST` only to warn about exposure. See "Changing
+the Chroma port" below.
 
 The Hugging Face cache variables (`HF_HOME`, `HUGGINGFACE_HUB_CACHE`,
 `SENTENCE_TRANSFORMERS_HOME`) are read by those libraries directly. They are
@@ -245,7 +247,40 @@ Set it in `.env` instead to make it stick. `CHROMA_HTTP_URL` has to use the same
 port, otherwise the app starts normally and then fails on the first query.
 
 `CHROMA_BIND_HOST` defaults to `127.0.0.1`. Chroma has no authentication in front
-of it, so only change this if you understand what you are exposing.
+of it and has unpatched vulnerabilities (see
+[Known security issues](#known-security-issues)), so leave this alone unless you
+understand what you are exposing. The app logs a warning when it is set to
+anything other than loopback, or when `CHROMA_HTTP_URL` points at another machine.
+
+## Known security issues
+
+**chromadb has four open CVEs and no release that fixes them** (#130). Installed
+version 1.5.9 is the latest on PyPI.
+
+| CVE | Severity | What | Affects |
+| --- | --- | --- | --- |
+| CVE-2026-45829 | Critical | Code injection with no authentication, via a malicious model repo with `trust_remote_code=true` | 1.0.0 and later |
+| CVE-2026-45833 | Critical | The same, but needs authentication | 0.4.17 and later, so 0.6.x too |
+| CVE-2026-45830 | High | Any authenticated user can read, write and delete any tenant's collection | 0.4.17 and later |
+| CVE-2026-45831 | High | `SimpleRBACAuthorizationProvider` does not check which tenant a permission applies to | 0.5.0 and later |
+
+Every one of them needs a request to reach Chroma's HTTP API. Here that means:
+
+- `docker-compose.yml` publishes the port on `127.0.0.1` only, unless you change
+  `CHROMA_BIND_HOST`.
+- Nothing in this project sets `trust_remote_code`.
+- With no `CHROMA_HTTP_URL`, the app uses Chroma's embedded client and there is no
+  HTTP port at all.
+
+So the defaults are not exposed. **The unsafe configuration is publishing the Chroma
+port on a network other people share.** Do not do that.
+
+Going back to 0.6.3 would not help: it keeps CVE-2026-45833 and 45830, and only
+avoids 45829. This section goes when a fixed release exists; the Trivy allowlist in
+`.trivyignore` expires on 2027-02-05 to force that check.
+
+A fifth finding, CVE-2026-68770 in sentence-transformers (#137), needs write access to a
+model directory on disk and is tracked separately.
 
 ## Logging
 

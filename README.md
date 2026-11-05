@@ -92,6 +92,12 @@ Set `LLM_PROVIDER=llama_cpp`, the default, to keep everything local.
 
 ---
 
+## ⚠️ Known security issues
+
+chromadb has open CVEs with no fixed release. The defaults keep Chroma on loopback,
+which is what makes that tolerable, so do not publish its port on a shared network.
+Details in [docs/configuration.md](docs/configuration.md#known-security-issues).
+
 ## 🛠️ Maintenance
 
 * Show stats: `rag stats`
