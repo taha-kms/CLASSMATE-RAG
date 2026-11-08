@@ -12,7 +12,7 @@ rank-bm25>=0.2.2,<0.3
 numpy>=2.2.6,<3.0
 
 # Embeddings: multilingual-e5-base via Sentence-Transformers
-sentence-transformers>=2.5.1,<3
+sentence-transformers>=5.6.0,<6
 
 # Local LLM runtime: Llama 3.1–8B via llama.cpp bindings
 llama-cpp-python>=0.2.90,<0.3

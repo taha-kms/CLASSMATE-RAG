@@ -328,9 +328,6 @@ Going back to 0.6.3 would not help: it keeps CVE-2026-45833 and 45830, and only
 avoids 45829. This section goes when a fixed release exists; the Trivy allowlist in
 `.trivyignore` expires on 2027-02-05 to force that check.
 
-A fifth finding, CVE-2026-68770 in sentence-transformers (#137), needs write access to a
-model directory on disk and is tracked separately.
-
 ## Logging
 
 `LOG_LEVEL` controls how much the CLI reports. Records go to stderr, so
