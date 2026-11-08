@@ -91,3 +91,9 @@ class SettingsUpdate(BaseModel):
     """
 
     changes: dict[str, str | int | float | bool | None] = Field(min_length=1)
+
+
+class KeyCheckRequest(BaseModel):
+    """Which provider's key to test. The key itself is never sent: the server tests the one it would use."""
+
+    provider: Literal["anthropic", "openai", "gemini"]

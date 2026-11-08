@@ -146,3 +146,19 @@ export interface SettingChange {
   restart_required: boolean;
   note: string;
 }
+
+export type KeyProvider = 'anthropic' | 'openai' | 'gemini';
+
+/** The provider's answer to "is this key accepted?". Never contains the key. */
+export interface KeyCheck {
+  provider: KeyProvider;
+  outcome: 'valid' | 'rejected' | 'rate_limited' | 'unreachable' | 'unexpected' | 'missing';
+  ok: boolean;
+  message: string;
+  /** Which key was tested: the server's environment wins over the stored one. */
+  source: 'environment' | 'stored' | '';
+  masked: string;
+  /** Where the request went. A local OpenAI-compatible server may accept any key. */
+  target: string;
+  status: number | null;
+}

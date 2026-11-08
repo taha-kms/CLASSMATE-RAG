@@ -9,6 +9,8 @@ import type {
   IndexStats,
   IngestMeta,
   Job,
+  KeyCheck,
+  KeyProvider,
   PreviewHit,
   ReconcileReport,
   SettingChange,
@@ -207,3 +209,7 @@ export const getSettings = async () =>
 /** `null` removes a setting. All changes are validated first; none apply if one is invalid. */
 export const putSettings = async (changes: Record<string, string | null>) =>
   (await json<{ changes: SettingChange[] }>('/settings', jsonBody('PUT', { changes }))).changes;
+
+/** Asks the provider whether the key the server would use is accepted. Sends no key. */
+export const validateKey = (provider: KeyProvider) =>
+  json<KeyCheck>('/settings/validate', jsonBody('POST', { provider }));

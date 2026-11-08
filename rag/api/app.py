@@ -34,6 +34,7 @@ from rag.api.models import (
     DeleteRequest,
     DumpRequest,
     Filters,
+    KeyCheckRequest,
     PreviewRequest,
     RebuildRequest,
     RestoreRequest,
@@ -454,6 +455,18 @@ def create_app(allowed_hosts: Iterable[str] | None = None) -> FastAPI:
                 for r in results
             ]
         }
+
+    @app.post("/settings/validate")
+    def validate_key(req: KeyCheckRequest) -> dict[str, Any]:
+        """Ask a provider whether the key the app would use is accepted (#147).
+
+        Takes only a provider name from a fixed list. The key is read server
+        side, so the browser never sends one and this cannot be pointed at an
+        arbitrary host. The answer is one of a fixed set of outcomes.
+        """
+        from rag.keycheck import check_key
+
+        return check_key(req.provider).as_dict()
 
     # ----------------------------------------------------------- frontend
 

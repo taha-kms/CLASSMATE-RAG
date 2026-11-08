@@ -178,6 +178,23 @@ host, port and path only (no userinfo, query or fragment), or hidden if they can
 Credentials are write-only: they are accepted here and stored outside `.env`, and read back only as
 a masked form ending in the last four characters.
 
+`POST /settings/validate` takes `{"provider": "anthropic" | "openai" | "gemini"}` and asks that provider's
+read-only model-list endpoint whether the key the server would use is accepted. No key is sent in the request
+and the provider must be one of the three names, so it cannot be aimed at another host. It tests the **effective**
+key, the environment before the credential store, and says which one:
+
+```json
+{"provider": "openai", "outcome": "valid", "ok": true, "message": "The provider accepted the key.",
+ "source": "stored", "masked": "********1234", "target": "https://api.openai.com/v1/models", "status": 200}
+```
+
+`outcome` is one of `valid`, `rejected` (401/403, and 400 from Gemini), `rate_limited`, `unreachable`,
+`unexpected` or `missing` (no request is made). The provider's response body and any error text are never
+returned. The key travels in a header, and redirects are not followed, so it is never re-sent elsewhere. With
+`OPENAI_BASE_URL` set, `target` shows where the request went: a local server often accepts any key, so `valid`
+there means that server answered, not that OpenAI would. The check is on demand only; saving a key does not
+trigger it. From a terminal: `rag config test openai` (exit status 1 unless every key given is valid).
+
 **This endpoint widens what an unauthenticated API can do.** Anyone who can reach the port can set
 `OPENAI_BASE_URL` and `LLM_PROVIDER` and so redirect later questions, and the course text sent with
 them, to a server of their choosing. That is the same "the bind address is the whole security model"
