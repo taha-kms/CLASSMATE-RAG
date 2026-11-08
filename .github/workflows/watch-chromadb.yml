@@ -1,0 +1,66 @@
+name: watch-chromadb
+
+# chromadb has no fixed release for CVE-2026-45829 and friends (#130). This job
+# looks for one every week, so the first sign of a fix is a comment on the issue
+# rather than the Trivy allowlist expiring in February.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  ISSUE: "130"
+  ADVISORY: GHSA-f4j7-r4q5-qw2c
+  # The newest release when #130 was written. A different latest version is
+  # worth a look even if the advisory has not caught up yet.
+  KNOWN_LATEST: "1.5.9"
+
+jobs:
+  watch:
+    name: Look for a fixed chromadb
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PyPI and the advisory
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          latest=$(curl -fsS https://pypi.org/pypi/chromadb/json | jq -r '.info.version')
+          patched=$(gh api "/advisories/${ADVISORY}" \
+            --jq '[.vulnerabilities[] | select(.package.name == "chromadb") | .first_patched_version] | map(select(. != null)) | first // ""')
+
+          echo "latest on PyPI: ${latest}"
+          echo "first patched version in the advisory: ${patched:-none}"
+
+          if [ -z "${patched}" ] && [ "${latest}" = "${KNOWN_LATEST}" ]; then
+            echo "No change. Nothing to report."
+            exit 0
+          fi
+
+          # One comment per distinct finding, so a weekly run does not repeat itself.
+          marker="<!-- watch-chromadb: latest=${latest} patched=${patched:-none} -->"
+          if gh api "repos/${GH_REPO}/issues/${ISSUE}/comments" --paginate --jq '.[].body' \
+              | grep -qF -- "${marker}"; then
+            echo "Already reported this finding."
+            exit 0
+          fi
+
+          {
+            echo "${marker}"
+            echo "The weekly chromadb check found something to look at."
+            echo
+            echo "- Latest release on PyPI: \`${latest}\` (this repo has been tracking \`${KNOWN_LATEST}\`)"
+            echo "- First patched version in [${ADVISORY}](https://github.com/advisories/${ADVISORY}): \`${patched:-none}\`"
+            echo
+            echo "If a release fixes CVE-2026-45829, CVE-2026-45833, CVE-2026-45830 and CVE-2026-45831: raise the pin in \`requirements.txt\`, remove the four entries from \`.trivyignore\`, drop the section in \`docs/configuration.md\`, and close this issue."
+            echo "Confirm against the advisory before acting. A newer version number alone is not a fix."
+          } > comment.md
+
+          gh issue comment "${ISSUE}" --body-file comment.md
