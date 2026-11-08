@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ApiError, getSettings, putSettings } from './api';
-import type { SettingChange, SettingInfo } from './types';
+import { ApiError, getSettings, putSettings, validateKey } from './api';
+import type { KeyCheck, KeyProvider, SettingChange, SettingInfo } from './types';
 
 const messageOf = (caught: unknown) =>
   caught instanceof ApiError ? caught.message : 'Something went wrong.';
@@ -13,6 +13,58 @@ const SOURCE_LABEL: Record<SettingInfo['source'], string> = {
   stored: 'stored',
   unset: 'not set',
 };
+
+const KEY_PROVIDER: Record<string, KeyProvider> = {
+  ANTHROPIC_API_KEY: 'anthropic',
+  OPENAI_API_KEY: 'openai',
+  GEMINI_API_KEY: 'gemini',
+};
+
+/**
+ * Asks the provider whether the saved key is accepted.
+ *
+ * It tests the key the server would use, which is not the text in the box:
+ * save first, then test. The result says where that key came from, because a
+ * key exported in the server's environment wins over a stored one.
+ */
+function KeyTest({ provider, disabled }: { provider: KeyProvider; disabled: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<KeyCheck | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const run = async () => {
+    setBusy(true);
+    setFailure(null);
+    try {
+      setResult(await validateKey(provider));
+    } catch (caught) {
+      setResult(null);
+      setFailure(messageOf(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <span>
+      <button type="button" className="link" onClick={run} disabled={busy || disabled}>
+        {busy ? 'Testing…' : 'Test key'}
+      </button>
+      {disabled && ' (save the new key first)'}
+      <span role="status">
+        {result && (
+          <>
+            {' '}
+            <strong>{result.ok ? 'Accepted.' : 'Not accepted.'}</strong> {result.message} Tested the{' '}
+            {result.source === 'environment' ? 'key set in the server’s environment' : 'stored key'}{' '}
+            ({result.masked}) against {result.target}.
+          </>
+        )}
+        {failure && ` ${failure}`}
+      </span>
+    </span>
+  );
+}
 
 function Field({
   setting,
@@ -36,6 +88,7 @@ function Field({
       </div>
     );
   }
+  const keyProvider = KEY_PROVIDER[setting.key];
   const current = draft === undefined ? setting.value : (draft ?? '');
   // Empty text means "use the default", so show the default as the hint.
   const placeholder = setting.default || undefined;
@@ -65,6 +118,12 @@ function Field({
             </button>
           )}
           {draft === null && ' Will be removed when you save.'}
+          {keyProvider && setting.source !== 'unset' && draft !== null && (
+            <>
+              {' '}
+              <KeyTest provider={keyProvider} disabled={typeof draft === 'string'} />
+            </>
+          )}
         </p>
       </div>
     );

@@ -126,6 +126,7 @@ rag config get K_VECTOR
 rag config set K_VECTOR=12 K_BM25=12  # several at once; nothing is written if one is invalid
 rag config unset K_VECTOR             # back to the default
 rag config set OPENAI_API_KEY         # a credential: you are asked for it, it is never an argument
+rag config test openai              # ask the provider whether the saved key is accepted (read-only)
 ```
 
 **Where a value comes from.** Your shell beats `.env`, which beats the default. If a

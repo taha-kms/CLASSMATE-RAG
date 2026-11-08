@@ -621,6 +621,13 @@ def cmd_config(args: argparse.Namespace) -> int:
                 changes[setting.key] = value
             results = settings.apply_changes(changes, trusted_local=True)
 
+        elif action == "test":
+            from rag.keycheck import check_key
+
+            checks = [check_key(p) for p in args.providers]
+            print(json.dumps({"action": "config", "checks": [c.as_dict() for c in checks]}, indent=2))
+            return 0 if all(c.outcome == "valid" for c in checks) else 1
+
         else:  # unset
             results = settings.apply_changes({settings.get_setting(k).key: None for k in args.keys}, trusted_local=True)
     except (SettingError, OSError) as e:
@@ -1035,6 +1042,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     pcu = pcsub.add_parser("unset", help="Remove settings, falling back to their defaults")
     pcu.add_argument("keys", nargs="+", metavar="KEY")
+    pct = pcsub.add_parser("test", help="Ask each provider whether its saved key is accepted (read-only)")
+    pct.add_argument("providers", nargs="+", choices=["anthropic", "openai", "gemini"])
     pc.set_defaults(func=cmd_config)
 
     ps = sub.add_parser("stats", help="Show index health and disk usage")

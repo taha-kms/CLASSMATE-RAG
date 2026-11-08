@@ -476,4 +476,92 @@ test.describe('server settings', () => {
     await expect(note).toContainText('still using INFO');
     await expect(note).toContainText('after you restart it');
   });
+  test.describe('testing a saved key', () => {
+    const check = (over: Record<string, unknown>) => ({
+      provider: 'openai',
+      outcome: 'valid',
+      ok: true,
+      message: 'The provider accepted the key.',
+      source: 'stored',
+      masked: '********1234',
+      target: 'https://api.openai.com/v1/models',
+      status: 200,
+      ...over,
+    });
+
+    test('asks the server to test the provider, sending no key, and shows which key was used', async ({
+      page,
+    }) => {
+      const posts: unknown[] = [];
+      await page.route('**/settings', (route) => json(route, { settings: SETTINGS }));
+      await page.route('**/settings/validate', (route) => {
+        posts.push(route.request().postDataJSON());
+        return json(route, check({ source: 'environment', masked: '********9999' }));
+      });
+
+      await page.goto('/#/settings');
+      await page.locator('summary', { hasText: 'Credentials' }).click();
+      await page
+        .getByTestId('setting-OPENAI_API_KEY')
+        .getByRole('button', { name: 'Test key' })
+        .click();
+
+      const row = page.getByTestId('setting-OPENAI_API_KEY');
+      await expect(row).toContainText('Accepted.');
+      await expect(row).toContainText('key set in the server’s environment');
+      await expect(row).toContainText('9999');
+      await expect(row).toContainText('api.openai.com');
+      expect(posts).toEqual([{ provider: 'openai' }]);
+    });
+
+    test('says plainly when the key is not accepted', async ({ page }) => {
+      await page.route('**/settings', (route) => json(route, { settings: SETTINGS }));
+      await page.route('**/settings/validate', (route) =>
+        json(
+          route,
+          check({
+            outcome: 'rejected',
+            ok: false,
+            status: 401,
+            message: 'The provider rejected the key.',
+          }),
+        ),
+      );
+
+      await page.goto('/#/settings');
+      await page.locator('summary', { hasText: 'Credentials' }).click();
+      const row = page.getByTestId('setting-OPENAI_API_KEY');
+      await row.getByRole('button', { name: 'Test key' }).click();
+
+      await expect(row).toContainText('Not accepted.');
+      await expect(row).toContainText('rejected the key');
+    });
+
+    test('is unavailable while a new key is typed, because it tests the saved one', async ({
+      page,
+    }) => {
+      await page.route('**/settings', (route) => json(route, { settings: SETTINGS }));
+      await page.goto('/#/settings');
+      await page.locator('summary', { hasText: 'Credentials' }).click();
+
+      await page.locator('#setting-OPENAI_API_KEY').fill('sk-fake-new-key-0000');
+
+      const row = page.getByTestId('setting-OPENAI_API_KEY');
+      await expect(row.getByRole('button', { name: 'Test key' })).toBeDisabled();
+      await expect(row).toContainText('save the new key first');
+    });
+
+    test('shows a failed request instead of nothing', async ({ page }) => {
+      await page.route('**/settings', (route) => json(route, { settings: SETTINGS }));
+      await page.route('**/settings/validate', (route) =>
+        route.fulfill({ status: 500, contentType: 'application/json', body: '{"detail":"boom"}' }),
+      );
+      await page.goto('/#/settings');
+      await page.locator('summary', { hasText: 'Credentials' }).click();
+      const row = page.getByTestId('setting-OPENAI_API_KEY');
+      await row.getByRole('button', { name: 'Test key' }).click();
+
+      await expect(row.getByRole('status')).not.toBeEmpty();
+    });
+  });
 });
