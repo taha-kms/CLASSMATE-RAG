@@ -1,6 +1,6 @@
 # Minimal deps to run the unit-test suite (tests/) without pulling the
 # full ML stack (torch, sentence-transformers, llama-cpp-python, chromadb…).
-pydantic>=2.14.2,<3
+pydantic>=2.14.3,<3
 pytest
 pytest-cov
 
@@ -20,7 +20,7 @@ langdetect>=1.0.9,<1.1
 # and failed in CI purely on version. Dependabot bumps this, and the bump
 # carries whatever reformatting comes with it, which is where that diff
 # belongs.
-ruff==0.17.3
+ruff==0.17.4
 
 # The local API, so tests/test_api_*.py can build the app and drive it through
 # TestClient. Light on purpose: rag/api/app.py keeps every heavy import inside
