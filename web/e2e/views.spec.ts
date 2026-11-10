@@ -72,13 +72,17 @@ test.describe('ingest', () => {
       return json(route, { chunks: 4 }, 201);
     });
 
+    await page.route('**/facets', (route) => json(route, FACETS));
+
     await page.goto('/#/ingest');
     await page.getByLabel('File').setInputFiles({
       name: 'notes.md',
       mimeType: 'text/markdown',
       buffer: Buffer.from('# hello'),
     });
-    await page.getByLabel('Course').fill('Maths');
+    await page.getByLabel('Course').selectOption('Maths');
+    // A unit that is not in the list yet: choose "+ Add new" and type it.
+    await page.getByLabel('Unit').selectOption({ label: '+ Add new…' });
     await page.getByLabel('Unit').fill('3');
     await page.getByRole('button', { name: 'Ingest' }).click();
 
@@ -152,11 +156,13 @@ test.describe('corpus', () => {
       json(route, { count: 1, offset: 0, chunks: [CHUNK('cm_a')] }),
     );
 
+    await page.route('**/facets', (route) => json(route, FACETS));
+
     await page.goto('/#/corpus');
     const button = page.getByRole('button', { name: /Delete everything matching/ });
     await expect(button).toBeDisabled();
 
-    await page.getByLabel('Course').fill('Maths');
+    await page.getByLabel('Course').selectOption('Maths');
     await page.getByRole('button', { name: 'Apply filters' }).click();
     await expect(button).toBeEnabled();
   });
@@ -172,6 +178,12 @@ test.describe('corpus', () => {
     await expect(page.getByRole('button', { name: 'Previous' })).toBeDisabled();
   });
 });
+
+const FACETS = {
+  course: ['Chemistry', 'Maths'],
+  unit: ['1', '2', '10'],
+  author: [],
+};
 
 test.describe('settings', () => {
   const STATS = {
@@ -563,5 +575,59 @@ test.describe('server settings', () => {
 
       await expect(row.getByRole('status')).not.toBeEmpty();
     });
+  });
+});
+
+test.describe('dropdown fields', () => {
+  test('a filter offers what is already in the corpus, and nothing to add', async ({ page }) => {
+    await page.route('**/facets', (route) => json(route, FACETS));
+
+    await page.goto('/#/preview');
+    const course = page.getByLabel('Course');
+
+    await expect(course.locator('option')).toHaveText(['Any', 'Chemistry', 'Maths']);
+    await expect(page.getByLabel('Unit').locator('option')).toHaveText(['Any', '1', '2', '10']);
+    // Asking for a course that does not exist can only return nothing.
+    await expect(course.locator('option', { hasText: 'Add new' })).toHaveCount(0);
+  });
+
+  test('language is a fixed list, and type and semester are not offered', async ({ page }) => {
+    await page.route('**/facets', (route) => json(route, FACETS));
+
+    await page.goto('/#/preview');
+    await expect(page.getByLabel('Language').locator('option')).toHaveText(['Any', 'en', 'it']);
+    await expect(page.getByLabel('Type')).toHaveCount(0);
+    await expect(page.getByLabel('Semester')).toHaveCount(0);
+  });
+
+  test('ingesting can add a new course, and go back to the list', async ({ page }) => {
+    await page.route('**/facets', (route) => json(route, FACETS));
+
+    await page.goto('/#/ingest');
+    const course = page.getByLabel('Course');
+    await expect(course.locator('option').last()).toHaveText('+ Add new…');
+    // Language still cannot gain values: the server only accepts these.
+    await expect(page.getByLabel('Language').locator('option')).toHaveText([
+      'Not set',
+      'en',
+      'it',
+      'auto',
+    ]);
+
+    await course.selectOption({ label: '+ Add new…' });
+    await page.getByLabel('Course').fill('Physics');
+    await expect(page.getByLabel('Course')).toHaveValue('Physics');
+
+    await page.getByRole('button', { name: 'Back to list' }).click();
+    await expect(page.getByLabel('Course')).toHaveValue('');
+    await expect(page.getByLabel('Course').locator('option')).toHaveCount(4);
+  });
+
+  test('the fields still work when the server cannot list values', async ({ page }) => {
+    await page.route('**/facets', (route) => route.fulfill({ status: 500, body: 'no' }));
+
+    await page.goto('/#/preview');
+    await expect(page.getByLabel('Course').locator('option')).toHaveText(['Any']);
+    await expect(page.getByLabel('Language').locator('option')).toHaveText(['Any', 'en', 'it']);
   });
 });
