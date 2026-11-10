@@ -5,6 +5,7 @@ import type {
   Chunk,
   ChunkPage,
   DeleteReport,
+  Facets,
   Filters,
   IndexStats,
   IngestMeta,
@@ -213,3 +214,6 @@ export const putSettings = async (changes: Record<string, string | null>) =>
 /** Asks the provider whether the key the server would use is accepted. Sends no key. */
 export const validateKey = (provider: KeyProvider) =>
   json<KeyCheck>('/settings/validate', jsonBody('POST', { provider }));
+
+/** The values each metadata field already takes in the corpus. */
+export const getFacets = () => json<Facets>('/facets');

@@ -147,6 +147,39 @@ def list_entries(
     return filt[offset : offset + limit]
 
 
+#: Metadata fields a user picks from a list rather than types, and the most
+#: values to offer for each. A corpus with thousands of distinct authors is
+#: better served by typing than by a dropdown.
+FACET_FIELDS: tuple[str, ...] = ("course", "unit", "author", "semester")
+FACET_LIMIT = 200
+
+
+def distinct_values(fields: Sequence[str] = FACET_FIELDS) -> dict[str, list[str]]:
+    """
+    The values each metadata field takes across the corpus, for filter dropdowns.
+
+    Sorted, de-duplicated, blanks dropped, and capped at FACET_LIMIT per field.
+    Numbers are returned as text, because that is how a filter sends them.
+    """
+    seen: dict[str, set[str]] = {f: set() for f in fields}
+    for entry in _read_bm25_catalog():
+        for f in fields:
+            raw = entry.metadata.get(f)
+            if raw is None:
+                continue
+            value = str(raw).strip()
+            if value:
+                seen[f].add(value)
+    return {f: sorted(values, key=_natural)[:FACET_LIMIT] for f, values in seen.items()}
+
+
+def _natural(text: str) -> list[object]:
+    """Sort "Unit 2" before "Unit 10": digit runs compare as numbers."""
+    import re
+
+    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", text)]
+
+
 def show_entries_by_id(ids: Iterable[str]) -> list[CatalogEntry]:
     """Return catalog entries matching the given IDs (preserve order)."""
     want = [str(x) for x in ids]

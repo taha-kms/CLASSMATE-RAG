@@ -42,6 +42,7 @@ legitimately.
 | `POST` | `/preview` | Retrieval only, with scores. No model is loaded. |
 | `POST` | `/ingest` | Upload and ingest a file. Fields mirror `rag add`. |
 | `GET` | `/chunks` | List indexed chunks, same filters as `rag list`. |
+| `GET` | `/facets` | The values already in the corpus for `course`, `unit`, `author` and `semester` (sorted, at most 200 each), which fill the web UI's filter dropdowns. |
 | `GET` | `/chunks/{id}` | One chunk, as `rag show`. |
 | `DELETE` | `/chunks` | Delete by ids, path or filter. Dry run by default. |
 | `GET` | `/stats` | Index health, as `rag stats`. |

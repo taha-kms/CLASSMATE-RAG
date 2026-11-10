@@ -531,3 +531,28 @@ input[readonly] {
 .katex {
   font-size: 1.08em;
 }
+
+/* Filter and ingest fields: a dropdown, or a text box while adding a new value. */
+.field {
+  min-width: 0;
+}
+
+.field select,
+.field input {
+  margin-top: 0.25rem;
+}
+
+.adding {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.adding input {
+  flex: 1;
+  min-width: 0;
+}
+
+.adding button {
+  white-space: nowrap;
+}

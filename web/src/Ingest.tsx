@@ -1,16 +1,7 @@
 import { useRef, useState } from 'react';
 import { ApiError, ingest } from './api';
+import { MetaFields } from './MetaFields';
 import type { IngestMeta } from './types';
-
-const FIELDS: Array<[keyof IngestMeta, string]> = [
-  ['course', 'Course'],
-  ['unit', 'Unit'],
-  ['language', 'Language'],
-  ['doc_type', 'Type'],
-  ['author', 'Author'],
-  ['semester', 'Semester'],
-  ['tags', 'Tags (comma separated)'],
-];
 
 export default function Ingest() {
   const [file, setFile] = useState<File | null>(null);
@@ -62,18 +53,15 @@ export default function Ingest() {
           />
         </div>
 
-        <div className="filters">
-          {FIELDS.map(([key, label]) => (
-            <label key={key}>
-              {label}
-              <input
-                value={meta[key] ?? ''}
-                onChange={(event) => setMeta({ ...meta, [key]: event.target.value })}
-                autoComplete="off"
-              />
-            </label>
-          ))}
-        </div>
+        <MetaFields value={meta} onChange={setMeta} allowNew />
+        <label>
+          Tags (comma separated)
+          <input
+            value={meta.tags ?? ''}
+            onChange={(event) => setMeta({ ...meta, tags: event.target.value })}
+            autoComplete="off"
+          />
+        </label>
 
         {/* The API answers once the file is indexed; there is no incremental
             progress to report, so say what is happening rather than fake a bar. */}

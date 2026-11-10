@@ -264,6 +264,13 @@ def create_app(allowed_hosts: Iterable[str] | None = None) -> FastAPI:
         entries = list_entries(where=where, limit=limit, offset=offset)
         return {"count": len(entries), "offset": offset, "chunks": _to_jsonable(entries)}
 
+    @app.get("/facets")
+    def facets() -> dict[str, list[str]]:
+        """The values already in the corpus for each metadata field, for the filter dropdowns."""
+        from rag.admin.manage import distinct_values
+
+        return distinct_values()
+
     @app.get("/chunks/{chunk_id}")
     def show_chunk(chunk_id: str) -> dict[str, Any]:
         from rag.admin.manage import show_entries_by_id
