@@ -519,3 +519,15 @@ input[readonly] {
   white-space: nowrap;
   overflow-wrap: normal;
 }
+
+/* Typeset formulas sit in the serif answer without changing its rhythm. */
+.math-block {
+  display: block;
+  margin: 0.6rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.katex {
+  font-size: 1.08em;
+}

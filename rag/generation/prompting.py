@@ -72,6 +72,8 @@ def build_grounded_messages(
         )
     else:
         sys += "You may use the provided context, but citations are optional."
+    # The web UI typesets LaTeX. Without a delimiter a formula reads as noise.
+    sys += " Write mathematical expressions in LaTeX, inline between $...$ and displayed between $$...$$."
 
     user = f"Context:\n{context_text}\n\nQuestion:\n{question}\n\nAnswer:"
     return [{"role": "system", "content": sys}, {"role": "user", "content": user}]
