@@ -56,30 +56,32 @@ export default function Preview({ knobs }: { knobs: Knobs }) {
       {hits && hits.length === 0 && <p>Nothing matched.</p>}
 
       {hits && hits.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Fused</th>
-              <th>Vector distance</th>
-              <th>BM25</th>
-              <th>Source</th>
-              <th>Snippet</th>
-            </tr>
-          </thead>
-          <tbody>
-            {hits.map((hit) => (
-              <tr key={hit.id} data-testid="hit">
-                <td>{hit.n}</td>
-                <td>{fixed(hit.scores.fused)}</td>
-                <td>{fixed(hit.scores.vector_distance)}</td>
-                <td>{fixed(hit.scores.bm25_score)}</td>
-                <td>{hit.prov}</td>
-                <td>{hit.snippet}</td>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Fused</th>
+                <th>Vector distance</th>
+                <th>BM25</th>
+                <th>Source</th>
+                <th>Snippet</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {hits.map((hit) => (
+                <tr key={hit.id} data-testid="hit">
+                  <td>{hit.n}</td>
+                  <td>{fixed(hit.scores.fused)}</td>
+                  <td>{fixed(hit.scores.vector_distance)}</td>
+                  <td>{fixed(hit.scores.bm25_score)}</td>
+                  <td>{hit.prov}</td>
+                  <td>{hit.snippet}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

@@ -38,21 +38,24 @@ export default function App() {
   }, []);
 
   return (
-    <main>
-      <h1>CLASSMATE-RAG</h1>
-      <nav aria-label="Views">
-        {VIEWS.map((name) => (
-          <a key={name} href={`#/${name}`} aria-current={name === view ? 'page' : undefined}>
-            {LABELS[name]}
-          </a>
-        ))}
-      </nav>
-
-      {view === 'chat' && <Chat knobs={knobs} />}
-      {view === 'preview' && <Preview knobs={knobs} />}
-      {view === 'ingest' && <Ingest />}
-      {view === 'corpus' && <Corpus />}
-      {view === 'settings' && <Settings knobs={knobs} onKnobs={setKnobs} />}
-    </main>
+    <div className="shell">
+      <header className="rail">
+        <h1>Classmate</h1>
+        <nav aria-label="Views">
+          {VIEWS.map((name) => (
+            <a key={name} href={`#/${name}`} aria-current={name === view ? 'page' : undefined}>
+              {LABELS[name]}
+            </a>
+          ))}
+        </nav>
+      </header>
+      <main>
+        {view === 'chat' && <Chat knobs={knobs} />}
+        {view === 'preview' && <Preview knobs={knobs} />}
+        {view === 'ingest' && <Ingest />}
+        {view === 'corpus' && <Corpus />}
+        {view === 'settings' && <Settings knobs={knobs} onKnobs={setKnobs} />}
+      </main>
+    </div>
   );
 }

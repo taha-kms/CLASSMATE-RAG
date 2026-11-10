@@ -84,8 +84,10 @@ export default function Chat({ knobs }: { knobs: Knobs }) {
 
   return (
     <section aria-label="Chat">
-      <form onSubmit={onSubmit}>
-        <label htmlFor="question">Question</label>
+      <form onSubmit={onSubmit} className="ask">
+        <label htmlFor="question" className="ask-label">
+          Question
+        </label>
         <input
           id="question"
           name="question"
@@ -110,6 +112,13 @@ export default function Chat({ knobs }: { knobs: Knobs }) {
         </div>
       </form>
 
+      {!pending && !text && !result && !error && (
+        <p className="empty">
+          Ask about anything you have ingested. When an answer comes from your notes, each claim
+          links to the passage behind it.
+        </p>
+      )}
+
       {pending && stage && (
         <p className="muted" role="status" data-testid="stage">
           {stage.message}
@@ -119,17 +128,11 @@ export default function Chat({ knobs }: { knobs: Knobs }) {
       {error && <p role="alert">{error}</p>}
 
       {(text || result) && (
-        <article aria-label="answer">
+        <article aria-label="answer" className="page">
           <p className="answer">{result ? withCitations(text, openCitation) : text}</p>
 
-          {result?.notice && (
-            <p className="muted" data-testid="notice">
-              {result.notice}
-            </p>
-          )}
-
           {result && result.sources.length > 0 && (
-            <>
+            <div className="margin">
               <h2>Sources</h2>
               <ol>
                 {result.sources.map((source) => (
@@ -141,8 +144,10 @@ export default function Chat({ knobs }: { knobs: Knobs }) {
                   </li>
                 ))}
               </ol>
-            </>
+            </div>
           )}
+
+          {result?.notice && <p data-testid="notice">{result.notice}</p>}
         </article>
       )}
 
