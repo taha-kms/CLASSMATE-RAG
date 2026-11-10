@@ -4,20 +4,16 @@ import type { Facets } from './types';
 
 const ADD = '__add__';
 
-type Key = 'course' | 'unit' | 'language' | 'doc_type' | 'author' | 'semester';
+type Key = 'course' | 'unit' | 'language' | 'author';
 
 const LISTED: Array<[Extract<Key, keyof Facets>, string]> = [
   ['course', 'Course'],
   ['unit', 'Unit'],
 ];
-const LISTED_AFTER: Array<[Extract<Key, keyof Facets>, string]> = [
-  ['author', 'Author'],
-  ['semester', 'Semester'],
-];
+const LISTED_AFTER: Array<[Extract<Key, keyof Facets>, string]> = [['author', 'Author']];
 
-// The server only accepts these for language and type, so they are fixed lists.
+// The server only accepts these for language, so it is a fixed list.
 const LANGUAGES = ['en', 'it'];
-const DOC_TYPES = ['pdf', 'docx', 'pptx', 'md', 'txt', 'html', 'csv', 'epub', 'other'];
 
 /** The values already in the corpus. Without them the lists are just empty. */
 function useFacets(): Facets | null {
@@ -112,13 +108,13 @@ function Choice({
 export type MetaValue = Partial<Record<Key, string>>;
 
 /**
- * Course, unit, language, type, author and semester as dropdowns.
+ * Course, unit, language and author as dropdowns.
  *
  * For filtering, a value is chosen from what is already in the corpus: asking
  * for a course that does not exist can only return nothing. For ingesting,
  * `allowNew` adds "+ Add new…" to the lists that are open-ended, because that
- * is where a new course comes into being. Language and type are fixed lists
- * either way: the server rejects anything else.
+ * is where a new course comes into being. Language is a fixed list either
+ * way: the server rejects anything else.
  */
 export function MetaFields<T extends MetaValue>({
   value,
@@ -154,14 +150,6 @@ export function MetaFields<T extends MetaValue>({
         empty={empty}
         allowNew={false}
         onChange={set('language')}
-      />
-      <Choice
-        label="Type"
-        value={value.doc_type ?? ''}
-        options={DOC_TYPES}
-        empty={empty}
-        allowNew={false}
-        onChange={set('doc_type')}
       />
       {LISTED_AFTER.map(([key, label]) => listed(key, label))}
     </div>

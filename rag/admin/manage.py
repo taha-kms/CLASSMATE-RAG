@@ -150,7 +150,7 @@ def list_entries(
 #: Metadata fields a user picks from a list rather than types, and the most
 #: values to offer for each. A corpus with thousands of distinct authors is
 #: better served by typing than by a dropdown.
-FACET_FIELDS: tuple[str, ...] = ("course", "unit", "author", "semester")
+FACET_FIELDS: tuple[str, ...] = ("course", "unit", "author")
 FACET_LIMIT = 200
 
 

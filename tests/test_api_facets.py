@@ -32,7 +32,7 @@ def test_values_are_distinct_sorted_and_blanks_dropped():
     assert facets["course"] == ["Chemistry", "Maths"]
     assert facets["unit"] == ["2", "10"]  # numeric order, not "10" before "2"
     assert facets["author"] == ["Rossi"]
-    assert facets["semester"] == []
+    assert "semester" not in facets  # not offered as a dropdown
 
 
 def test_a_huge_field_is_capped():
@@ -43,13 +43,13 @@ def test_a_huge_field_is_capped():
 
 def test_an_empty_corpus_gives_empty_lists():
     with patch("rag.admin.manage._read_bm25_catalog", return_value=[]):
-        assert distinct_values() == {"course": [], "unit": [], "author": [], "semester": []}
+        assert distinct_values() == {"course": [], "unit": [], "author": []}
 
 
 def test_the_endpoint_returns_them():
-    cat = _entries({"course": "Maths", "semester": "2025-1"})
+    cat = _entries({"course": "Maths", "author": "Rossi"})
     with patch("rag.admin.manage._read_bm25_catalog", return_value=cat):
         r = TestClient(create_app()).get("/facets")
     assert r.status_code == 200
     assert r.json()["course"] == ["Maths"]
-    assert r.json()["semester"] == ["2025-1"]
+    assert r.json()["author"] == ["Rossi"]

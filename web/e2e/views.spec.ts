@@ -183,7 +183,6 @@ const FACETS = {
   course: ['Chemistry', 'Maths'],
   unit: ['1', '2', '10'],
   author: [],
-  semester: ['2025-1'],
 };
 
 test.describe('settings', () => {
@@ -592,23 +591,13 @@ test.describe('dropdown fields', () => {
     await expect(course.locator('option', { hasText: 'Add new' })).toHaveCount(0);
   });
 
-  test('language and type are fixed lists the server accepts', async ({ page }) => {
+  test('language is a fixed list, and type and semester are not offered', async ({ page }) => {
     await page.route('**/facets', (route) => json(route, FACETS));
 
     await page.goto('/#/preview');
     await expect(page.getByLabel('Language').locator('option')).toHaveText(['Any', 'en', 'it']);
-    await expect(page.getByLabel('Type').locator('option')).toHaveText([
-      'Any',
-      'pdf',
-      'docx',
-      'pptx',
-      'md',
-      'txt',
-      'html',
-      'csv',
-      'epub',
-      'other',
-    ]);
+    await expect(page.getByLabel('Type')).toHaveCount(0);
+    await expect(page.getByLabel('Semester')).toHaveCount(0);
   });
 
   test('ingesting can add a new course, and go back to the list', async ({ page }) => {

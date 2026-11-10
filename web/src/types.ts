@@ -164,4 +164,4 @@ export interface KeyCheck {
 }
 
 /** Values already in the corpus for each metadata field, for dropdowns. */
-export type Facets = Record<'course' | 'unit' | 'author' | 'semester', string[]>;
+export type Facets = Record<'course' | 'unit' | 'author', string[]>;
