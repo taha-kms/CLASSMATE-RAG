@@ -1,23 +1,9 @@
-import { Fragment, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useRef, useState } from 'react';
 import { ApiError, askStream, getChunk } from './api';
 import { FilterFields } from './FilterFields';
+import { RichText } from './rich';
 import type { Knobs } from './settings-store';
 import type { AskResult, Chunk, Filters, Stage } from './types';
-
-/** Turn [n] markers in an answer into buttons that open the cited chunk. */
-function withCitations(text: string, onOpen: (n: number) => void): ReactNode[] {
-  return text.split(/(\[\d+\])/g).map((part, index) => {
-    const match = /^\[(\d+)\]$/.exec(part);
-    if (!match) return <Fragment key={index}>{part}</Fragment>;
-    const n = Number(match[1]);
-    return (
-      <button key={index} type="button" className="cite" onClick={() => onOpen(n)}>
-        {part}
-      </button>
-    );
-  });
-}
 
 export default function Chat({ knobs }: { knobs: Knobs }) {
   const [question, setQuestion] = useState('');
@@ -129,7 +115,9 @@ export default function Chat({ knobs }: { knobs: Knobs }) {
 
       {(text || result) && (
         <article aria-label="answer" className="page">
-          <p className="answer">{result ? withCitations(text, openCitation) : text}</p>
+          <p className="answer">
+            <RichText text={text} onCite={result ? openCitation : undefined} />
+          </p>
 
           {result && result.sources.length > 0 && (
             <div className="margin">
@@ -161,7 +149,9 @@ export default function Chat({ knobs }: { knobs: Knobs }) {
               Close
             </button>
           </div>
-          <pre>{opened.text}</pre>
+          <pre>
+            <RichText text={opened.text} />
+          </pre>
         </aside>
       )}
     </section>

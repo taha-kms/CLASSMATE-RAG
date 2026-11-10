@@ -38,6 +38,13 @@ def test_the_grounded_prompt_asks_for_citations():
     assert "[1] ctx" in messages[1]["content"]
 
 
+def test_the_grounded_prompt_asks_for_latex_maths():
+    # The UI typesets $...$ and $$...$$; without the instruction models mix notations.
+    for required in (True, False):
+        messages = build_grounded_messages(question="What?", context_text="[1] ctx", citations_required=required)
+        assert "latex" in messages[0]["content"].lower()
+
+
 def test_citations_can_be_made_optional():
     messages = build_grounded_messages(question="What?", context_text="[1] ctx", citations_required=False)
     assert "optional" in messages[0]["content"].lower()

@@ -195,3 +195,50 @@ test('the ask button stays disabled until there is a question', async ({ page })
   await page.getByLabel('Question').fill('a real question');
   await expect(button).toBeEnabled();
 });
+
+test.describe('formulas in an answer', () => {
+  const withAnswer = (answer: string) => ({ ...FINAL, answer });
+
+  async function show(page: import('@playwright/test').Page, answer: string) {
+    await page.route('**/ask', (route) => stream(route, sse(['final', withAnswer(answer)])));
+    await ask(page);
+    return page.getByRole('article', { name: 'answer' });
+  }
+
+  test('typesets inline and displayed LaTeX', async ({ page }) => {
+    const answer = await show(
+      page,
+      'For \\(y = f(g(x))\\) we get $\\frac{dy}{dx}$:\n\n$$\\frac{dy}{dx} = \\frac{dy}{du} \\cdot \\frac{du}{dx}$$',
+    );
+
+    await expect(answer.locator('.katex')).toHaveCount(3);
+    await expect(answer.locator('.katex-display')).toHaveCount(1);
+    // The delimiters are gone. (KaTeX keeps the TeX in a hidden MathML
+    // annotation for screen readers, so check the visible layer.)
+    await expect(answer).not.toContainText('$$');
+    await expect(answer).not.toContainText('\\(');
+    await expect(answer.locator('.katex-html').first()).toBeVisible();
+    await expect(answer.locator('.katex-html').first()).not.toContainText('frac');
+  });
+
+  test('a citation after a formula is still a button', async ({ page }) => {
+    const answer = await show(page, 'The rule is $f(g(x))$ [1].');
+
+    await expect(answer.locator('.katex')).toHaveCount(1);
+    await expect(page.locator('.answer').getByRole('button', { name: '[1]' })).toBeVisible();
+  });
+
+  test('prices and stray dollar signs stay prose', async ({ page }) => {
+    const answer = await show(page, 'The book costs $5 and the workbook $6.');
+
+    await expect(answer.locator('.katex')).toHaveCount(0);
+    await expect(answer).toContainText('costs $5 and the workbook $6.');
+  });
+
+  test('invalid LaTeX is shown as text and does not break the page', async ({ page }) => {
+    const answer = await show(page, 'Broken: $\\frac{1}{$ and then a fine one $x^2$.');
+
+    await expect(answer).toContainText('and then a fine one');
+    await expect(page.getByRole('button', { name: 'Ask' })).toBeVisible();
+  });
+});
