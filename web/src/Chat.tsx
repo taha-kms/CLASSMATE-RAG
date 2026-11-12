@@ -98,13 +98,6 @@ export default function Chat({ knobs }: { knobs: Knobs }) {
         </div>
       </form>
 
-      {!pending && !text && !result && !error && (
-        <p className="empty">
-          Ask about anything you have ingested. When an answer comes from your notes, each claim
-          links to the passage behind it.
-        </p>
-      )}
-
       {pending && stage && (
         <p className="muted" role="status" data-testid="stage">
           {stage.message}

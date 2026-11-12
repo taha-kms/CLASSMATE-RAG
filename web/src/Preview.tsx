@@ -32,9 +32,6 @@ export default function Preview({ knobs }: { knobs: Knobs }) {
 
   return (
     <section aria-label="Preview">
-      <p className="muted">
-        Retrieval only: no model is loaded. Use it to see why an answer went wrong.
-      </p>
       <form onSubmit={onSubmit}>
         <label htmlFor="preview-question">Query</label>
         <input
