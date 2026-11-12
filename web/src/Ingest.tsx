@@ -43,7 +43,7 @@ export default function Ingest() {
             setFile(event.dataTransfer.files[0] ?? null);
           }}
         >
-          <p>{file ? file.name : 'Drop a file here, or'}</p>
+          <p>{file ? file.name : 'Drop a file here, or choose one'}</p>
           <label htmlFor="file">File</label>
           <input
             id="file"
@@ -53,15 +53,17 @@ export default function Ingest() {
           />
         </div>
 
-        <MetaFields value={meta} onChange={setMeta} allowNew />
-        <label>
-          Tags (comma separated)
-          <input
-            value={meta.tags ?? ''}
-            onChange={(event) => setMeta({ ...meta, tags: event.target.value })}
-            autoComplete="off"
-          />
-        </label>
+        <div className="panel">
+          <MetaFields value={meta} onChange={setMeta} allowNew />
+          <label>
+            Tags (comma separated)
+            <input
+              value={meta.tags ?? ''}
+              onChange={(event) => setMeta({ ...meta, tags: event.target.value })}
+              autoComplete="off"
+            />
+          </label>
+        </div>
 
         {/* The API answers once the file is indexed; there is no incremental
             progress to report, so say what is happening rather than fake a bar. */}
