@@ -36,7 +36,7 @@ jobs:
         # Only on main. A pull request from a fork has no write access, and a
         # pull request from a branch should not be able to publish anything.
         if: github.event_name == 'push'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
